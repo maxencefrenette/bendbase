@@ -1,0 +1,5 @@
+[tools]
+"conda:clang" = "21.1.8"
+
+[settings]
+experimental = true
