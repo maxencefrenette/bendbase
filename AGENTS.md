@@ -17,5 +17,6 @@ From most to least important:
 ## Scope
 - WDL tables (no DTZ, DTM)
 - Pawnless 3-man positions and KPK (either pawn color)
-- Pawnless and exactly-one-pawn four-man correctness proofs and pure reference byte-list definitions
+- All four-man material configurations: correctness proofs and pure reference byte-list definitions
+- Four-man stored roots have no castling or en passant rights; en passant is included in continuations
 - Do not generate four-man tables in this proof-only milestone

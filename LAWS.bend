@@ -13,6 +13,9 @@ import ./src/four_tables.bend as FourTables
 import ./src/one_pawn_chess.bend as OnePawn
 import ./src/one_pawn_game.bend as OnePawnGame
 import ./src/one_pawn_tables.bend as OnePawnTables
+import ./src/two_pawn_chess.bend as TwoPawn
+import ./src/two_pawn_game.bend as TwoPawnGame
+import ./src/two_pawn_tables.bend as TwoPawnTables
 
 # Domain: two kings and one queen, rook, bishop, or knight, of either color;
 # either side to move; no castling rights. Squares and moves are defined in
@@ -303,3 +306,79 @@ law one_pawn_four_file_has_exact_length:
   for +other_moves: Nat
   for +profile: OnePawnTables.Profile
   {List.length(&2, U32, OnePawnTables.file(width, limit, moves, other_moves, profile)) == Finite.size(width) : Nat}
+
+# Four-man two-pawn domain: KPPK and KPKP, either color and side to move.
+# The two actual distances to promotion are structural recursion parameters,
+# not search fuel. Quiet king moves consume one halfmove; pawn moves/captures
+# reset the clock. Captures (including EP) enter KPK; promotion enters the
+# one-pawn game and subsequently the already-defined pawnless game.
+#
+# Pawn movement, double pushes, captures, and all four promotions follow the
+# rules above, with both pawns included in occupancy and attack calculations.
+# An EP right identifies the immediately preceding double-pushed pawn; its
+# starting/intermediate squares and predecessor king safety are validated.
+# Only an opposing adjacent fifth-rank pawn may capture it, onto the empty
+# intermediate square; the victim is removed and final king safety checked.
+# Every non-double move expires the old right; a double push replaces it.
+# Checkmate/stalemate include EP among legal replies, even at the clock boundary.
+#
+# To reuse the existing index, stored roots have NoEP (AND clock zero).
+# This is an explicit domain restriction: clock zero does NOT imply NoEP.
+# The game still includes all EP continuations after future double pushes.
+# Probing roots with EP rights is not supported by this file format.
+# Profile False is KPPK, True is KPKP; both pawn colors are in each 26-bit file.
+# The reference uses generic Game.evaluate directly, whose strategy theorem
+# is already proved for every finite game. No duplicate solver is necessary.
+# No four-man table generation, position enumeration in the proof, performance
+# claim, castling rights, or repetition history is added by this milestone.
+law two_pawn_moves_are_complete:
+  for +width: Nat
+  for format: {width == 8n : Nat}
+  for +a: Nat
+  for +b: Nat
+  for +board: TwoPawn.Position
+  for +move: TwoPawn.Action
+  for legal: Game.Truth(TwoPawn.legal(a, b, board, move))
+  TwoPawn.Member(TwoPawn.after(a, b, board, move), TwoPawn.successors(width, a, b, board))
+
+law two_pawn_moves_are_sound:
+  for +width: Nat
+  for +a: Nat
+  for +b: Nat
+  for +board: TwoPawn.Position
+  for +next: TwoPawn.Edge
+  for member: TwoPawn.Member(next, TwoPawn.successors(width, a, b, board))
+  TwoPawn.LegalSuccessor(width, a, b, board, next)
+
+law two_pawn_successors_are_safe:
+  for +width: Nat
+  for +a: Nat
+  for +b: Nat
+  for +board: TwoPawn.Position
+  for +next: TwoPawn.Edge
+  for member: TwoPawn.Member(next, TwoPawn.successors(width, a, b, board))
+  Game.Truth(TwoPawn.safe(a, b, next))
+
+law two_pawn_four_wdl_is_fully_correct:
+  for +limit: Nat
+  for horizon: {limit == 100n : Nat}
+  for +moves: Nat
+  for actions: {moves == 8n : Nat}
+  for +other_moves: Nat
+  for other_actions: {other_moves == 12n : Nat}
+  for +width: Nat
+  for +format: {width == 26n : Nat}
+  for +profile: TwoPawnTables.Profile
+  for +board: FourIndex.Board
+  for valid: Game.Truth(TwoPawn.valid(TwoPawnTables.first_advance(board), TwoPawnTables.second_advance(profile, board), TwoPawnTables.position(profile, board)))
+  Game.CorrectByte(TwoPawnGame.tree(limit, moves, other_moves, TwoPawnTables.first_advance(board), TwoPawnTables.second_advance(profile, board), TwoPawnTables.position(profile, board)),
+    Finite.read(TwoPawnTables.file(width, limit, moves, other_moves, profile),
+      Finite.offset(width, FourIndex.encode_at(width, board))))
+
+law two_pawn_four_file_has_exact_length:
+  for +width: Nat
+  for +limit: Nat
+  for +moves: Nat
+  for +other_moves: Nat
+  for +profile: TwoPawnTables.Profile
+  {List.length(&2, U32, TwoPawnTables.file(width, limit, moves, other_moves, profile)) == Finite.size(width) : Nat}
