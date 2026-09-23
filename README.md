@@ -61,6 +61,3 @@ Checkmate takes precedence on the move reaching 100 halfmoves. Otherwise that
 boundary is a terminal draw, following the agreed tablebase convention.
 Stalemate, insufficient material, and captures leaving K vs K are draws.
 The files do not store arbitrary nonzero halfmove clocks or repetition history.
-
-The previous pawn, rank, queue, and incomplete proof work is preserved under
-`archive/legacy/`; it is not imported by the current generator or proof.

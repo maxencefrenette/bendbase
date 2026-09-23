@@ -62,7 +62,7 @@ symbolic inputs.
 The active proof comprises roughly 850 lines across its helper modules, plus
 the short root proof. Most of the finite-game proof is case analysis over the
 three WDL outcomes. It does not generate tables or enumerate positions while
-checking. The old 16,000-line proof is archived and not imported.
+checking.
 
 ## Execution boundary
 
