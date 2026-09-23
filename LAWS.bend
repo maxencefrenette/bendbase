@@ -7,6 +7,9 @@ import ./src/pawnless_tables.bend as Tables
 import ./src/pawn_chess.bend as Pawn
 import ./src/pawn_tables.bend as PawnTables
 import ./src/material_chess.bend as Material
+import ./src/four_chess.bend as Four
+import ./src/four_index.bend as FourIndex
+import ./src/four_tables.bend as FourTables
 
 # Domain: two kings and one queen, rook, bishop, or knight, of either color;
 # either side to move; no castling rights. Squares and moves are defined in
@@ -124,8 +127,8 @@ law generated_kpk_file_has_exact_length:
 # of colored Q/R/B/N pieces. All occupied squares obstruct sliders, friendly
 # destinations and king captures are forbidden, and post-capture king safety
 # is checked on the resulting board. No castling. Pawns continue to use the
-# existing KPK rules; four-man pawn rules and all four-man WDL solving are NOT
-# certified here. Existing three-man solvers have not been switched over.
+# existing KPK rules; four-man pawn rules are NOT certified here. Existing
+# three-man solvers have not been switched over.
 #
 # A move is a source/destination pair, independent of material count. Width
 # 12 covers every pair. Keeping it equality-bound avoids expanding the finite
@@ -158,3 +161,72 @@ law material_three_man_roundtrip:
   for +material: Chess.Material
   for +board: Chess.Board
   {Material.to_three(Material.from_three(material, board)) == Material.Single{material, board} : Material.Projection}
+
+# These structural laws justify the material transitions in Four.forest:
+# quiet moves cannot reset the clock by changing material; captures strictly
+# reduce the number of non-kings. A four-man capture enters the three-man game
+# with a fresh clock. A subsequent capture leaves bare kings and draws.
+law material_moves_do_not_increase_count:
+  for +capacity: Nat
+  for +board: Material.Position
+  for +move: Material.Action
+  for bounded: Material.Bounded(capacity, board)
+  Material.Bounded(capacity, Material.after(board, move))
+
+law material_captures_reduce_count:
+  for +capacity: Nat
+  for +board: Material.Position
+  for +move: Material.Action
+  for bounded: Material.Bounded(1n+capacity, board)
+  for captured: Game.Truth(Material.capture(board, move))
+  Material.Bounded(capacity, Material.after(board, move))
+
+law material_quiet_moves_preserve_count:
+  for +board: Material.Position
+  for +move: Material.Action
+  for quiet: Game.Truth(Bool.not(Material.capture(board, move)))
+  {Material.count(Material.after(board, move)) == Material.count(board) : Nat}
+
+# Pawnless four-man domain: two kings plus ANY pair of Q/R/B/N, with either
+# ownership relation and either color to move. Material and all squares remain
+# universally quantified. No board scan is part of the proof.
+#
+# Rules follow the movement/check/mate rules of FIDE articles 3 and 5:
+# https://handbook.fide.com/chapter/E012023
+# As above, our agreed 100-halfmove terminal-draw convention replaces optional
+# claims/repetition history; checkmate takes precedence at the clock boundary.
+# Bare kings, a lone bishop/knight, and two same-square-color bishops are
+# insufficient material. Two knights are NOT automatically insufficient.
+# Four.single uses the SAME generalized move rules as Four.forest; it does not
+# assume the unproved equivalence of the old and generalized move predicates.
+#
+# This milestone certifies a pure reference minimax/byte-list definition.
+# It does not claim a memoized generator, Syzygy-level performance, or any
+# generated four-man files. main.bend deliberately does NOT generate them.
+# Width 26 gives one byte per board slot; move width 12 covers all source /
+# destination pairs. The index includes both color reversals in each material
+# configuration. The IO/runtime trust caveats for three-man files also apply.
+law four_position_index_roundtrip:
+  for +board: FourIndex.Board
+  {FourIndex.decode(FourIndex.encode(board)) == board : FourIndex.Board}
+
+law four_wdl_is_fully_correct:
+  for +limit: Nat
+  for horizon: {limit == 100n : Nat}
+  for +moves: Nat
+  for actions: {moves == 12n : Nat}
+  for +width: Nat
+  for +format: {width == 26n : Nat}
+  for +material: FourIndex.Material
+  for +board: FourIndex.Board
+  for valid: Game.Truth(Material.valid(FourIndex.position(material, board)))
+  Game.CorrectByte(Four.tree(limit, moves, FourIndex.position(material, board)),
+    Finite.read(FourTables.file(width, limit, moves, material),
+      Finite.offset(width, FourIndex.encode_at(width, board))))
+
+law four_file_has_exact_length:
+  for +width: Nat
+  for +limit: Nat
+  for +moves: Nat
+  for +material: FourIndex.Material
+  {List.length(&2, U32, FourTables.file(width, limit, moves, material)) == Finite.size(width) : Nat}

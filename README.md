@@ -14,10 +14,10 @@ mise exec -- bend PROOF.bend
 ```
 
 The proof is structural and does not enumerate chess positions. The current
-checker run takes about 0.4 seconds on this container. The comments in
+checker run takes about 0.5 seconds on this container. The comments in
 [LAWS.bend](LAWS.bend) document the theorem's scope and execution boundary.
 
-## Four-man groundwork
+## Pawnless four-man proof
 
 `src/material_chess.bend` provides material-independent pawnless positions and
 move rules: two kings plus a list of colored pieces, with full-board obstruction,
@@ -26,11 +26,26 @@ soundness, successor validity, and lossless conversion from three-man boards.
 The move domain is all 12-bit source/destination pairs; the proof keeps this
 domain symbolic rather than checking individual positions.
 
-This is the foundation for four-man generation, not a four-man tablebase yet.
-The existing three-man generators and their proofs remain unchanged. They have
-not migrated to this new move layer, and equivalence of the old and new legality
-predicates is not yet proved. Four-man terminal evaluation, clock-aware solving,
-indexing, serialization, and pawn support are subsequent milestones.
+The proof now covers every pawnless four-man material configuration, both
+ownership relations, both colors, and both sides to move. It connects a pure
+reference minimax recurrence to perfect-play strategies and to serialized WDL
+bytes. Captures enter the three-man game with a fresh 100-halfmove allowance;
+quiet moves consume one halfmove. Structural proofs establish that captures
+reduce material and quiet moves preserve it. The three-man continuation uses
+the same generalized rules, without assuming equivalence to the old solver.
+
+`four_index.Material` specifies the two piece kinds and whether they have
+opposing owners. Its reference file has a 26-bit index and one signed byte
+per slot (64 MiB). The high six bits encode the second piece's square; the
+low twenty bits use the existing three-man layout for the first piece and
+kings. Thus `offset = second_square * 1048576 + three_man_offset`.
+Invalid placements are outside the WDL theorem's domain.
+
+This is a **proof-only milestone**: no four-man tables have been generated,
+and `main.bend` still generates only the five three-man files. The reference
+recurrence is not memoized and is not intended for practical table generation;
+no generation-speed claim is made. A performant generator and four-man pawn
+support remain later work. Existing three-man generators and proofs are intact.
 
 ## Generate
 

@@ -192,3 +192,22 @@ def to_three(position: Position) -> Projection:
       Single{material, Three.Board{owner, turn, wk, bk, pc}}
     case _:
       NotSingle{}
+
+def Fits(capacity: Nat, men: List<&2, Man>) -> Data:
+  match capacity men:
+    case _ Nil{}:
+      Unit
+    case 0n head <> tail:
+      Empty
+    case 1n+rest head <> tail:
+      Fits(rest, tail)
+
+def Bounded(capacity: Nat, position: Position) -> Data:
+  match position:
+    case Position{turn, wk, bk, men}:
+      Fits(capacity, men)
+
+def count(position: Position) -> Nat:
+  match position:
+    case Position{turn, wk, bk, men}:
+      List.length(&2, Man, men)

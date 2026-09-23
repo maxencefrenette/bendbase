@@ -10,6 +10,11 @@ import ./src/pawn_chess.bend as Pawn
 import ./src/pawn_moves_proof.bend as PawnMovesProof
 import ./src/pawn_tables_proof.bend as PawnTablesProof
 import ./src/material_moves_proof.bend as MaterialProof
+import ./src/material_count_proof.bend as CountProof
+import ./src/four_chess.bend as Four
+import ./src/four_index.bend as FourIndex
+import ./src/four_index_proof.bend as FourIndexProof
+import ./src/four_tables_proof.bend as FourProof
 
 def Laws.legal_moves_are_complete(material, board, key, legal):
   MovesProof.legal_present(material, board, key, legal)
@@ -59,3 +64,26 @@ def Laws.material_successors_are_valid(width, board, next, member):
 
 def Laws.material_three_man_roundtrip(material, board):
   MaterialProof.three_roundtrip(material, board)
+
+def Laws.material_moves_do_not_increase_count(capacity, board, move, bounded):
+  CountProof.after_bounded(capacity, board, move, bounded)
+
+def Laws.material_captures_reduce_count(capacity, board, move, bounded, captured):
+  CountProof.after_captured(capacity, board, move, bounded, captured)
+
+def Laws.material_quiet_moves_preserve_count(board, move, quiet):
+  CountProof.after_quiet(board, move, quiet)
+
+def Laws.four_position_index_roundtrip(board):
+  FourIndexProof.roundtrip(board)
+
+def Laws.four_wdl_is_fully_correct(limit, horizon, moves, actions, width, format, material, board, valid):
+  +game = Four.tree(limit, moves, FourIndex.position(material, board))
+  (Game.evaluate(game),
+    (FourProof.serialized_value(width, format, limit, moves, material, board),
+     +player =>
+       (yes => GameProof.sound(game, player, yes),
+        strategy => GameProof.complete(game, player, strategy))))
+
+def Laws.four_file_has_exact_length(width, limit, moves, material):
+  FourProof.file_length(width, limit, moves, material)
