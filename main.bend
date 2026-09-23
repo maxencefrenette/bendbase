@@ -4,7 +4,7 @@ import ./src/table_file.bend as TableFile
 
 def main() -> IO(Unit):
   do IO<Unit>:
-    IO.print("Generating pawnless WDL tables (clock zero, one signed byte per position).")
+    IO.print("Generating three-man WDL tables (clock zero, one signed byte per position).")
     TableFile.write("build/kqk.wdl", Chess.Queen{})
     IO.print("Wrote build/kqk.wdl")
     TableFile.write("build/krk.wdl", Chess.Rook{})
@@ -13,3 +13,5 @@ def main() -> IO(Unit):
     IO.print("Wrote build/kbk.wdl")
     TableFile.write("build/knk.wdl", Chess.Knight{})
     IO.print("Wrote build/knk.wdl")
+    TableFile.write_kpk("build/kpk.wdl")
+    IO.print("Wrote build/kpk.wdl")

@@ -1,6 +1,6 @@
 # Bendbase
 
-A Bend 2 generator for pawnless three-man WDL tables: KQK, KRK, KBK, and KNK.
+A Bend 2 generator for three-man WDL tables: KQK, KRK, KBK, KNK, and KPK.
 Each table includes either owner of the extra piece and either side to move.
 Queries start at halfmove clock zero. Castling rights are excluded.
 
@@ -14,7 +14,7 @@ mise exec -- bend PROOF.bend
 ```
 
 The proof is structural and does not enumerate chess positions. The current
-checker run takes about 0.3 seconds on this container. The comments in
+checker run takes about 0.4 seconds on this container. The comments in
 [LAWS.bend](LAWS.bend) document the theorem's scope and execution boundary.
 
 ## Generate
@@ -27,10 +27,13 @@ mise exec -- bend main.bend -o build/bendbase
 ./build/bendbase
 ```
 
-The generator builds 100 clock layers and writes four files in `build/`.
-This implementation prioritizes the proof; the new four-table generation has
-not yet been run or benchmarked. Obsolete tables from the earlier implementation
-have been removed.
+The generator writes five files in `build/`. Pawnless tables use 100 clock
+layers. KPK solves each pawn rank at all clocks, starting nearest promotion;
+pawn pushes use completed rank tables at a fresh clock, and promotions use
+the pawnless tables. Both colors and all four promotion choices are included.
+This implementation prioritizes the proof; full table generation has not yet
+been run or benchmarked. Obsolete tables from the earlier implementation have
+been removed.
 
 ## File format
 
@@ -53,11 +56,14 @@ offset = white_king + 64 * black_king + 4096 * piece
 ```
 
 The formal offset is `Finite.offset(20n, Index.encode(board))`. The file names
-are `kqk.wdl`, `krk.wdl`, `kbk.wdl`, and `knk.wdl`. These are simple custom WDL
+are `kqk.wdl`, `krk.wdl`, `kbk.wdl`, `knk.wdl`, and `kpk.wdl`. These are simple custom WDL
 files, not Syzygy-compatible files. Invalid placements occupy zero-valued slots;
-callers must apply `Chess.valid` before interpreting an entry as a chess result.
+callers must apply `Chess.valid` (pawnless) or `Pawn.valid_board` (KPK) before
+interpreting an entry as a chess result. KPK uses the pawn square as `piece`;
+unpromoted pawns on the first or eighth rank are invalid.
 
 Checkmate takes precedence on the move reaching 100 halfmoves. Otherwise that
 boundary is a terminal draw, following the agreed tablebase convention.
 Stalemate, insufficient material, and captures leaving K vs K are draws.
+Every pawn move, including promotion, resets the halfmove clock to zero.
 The files do not store arbitrary nonzero halfmove clocks or repetition history.

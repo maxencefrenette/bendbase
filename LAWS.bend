@@ -4,6 +4,8 @@ import ./src/pawnless_chess.bend as Chess
 import ./src/pawnless_index.bend as Index
 import ./src/finite_table.bend as Finite
 import ./src/pawnless_tables.bend as Tables
+import ./src/pawn_chess.bend as Pawn
+import ./src/pawn_tables.bend as PawnTables
 
 # Domain: two kings and one queen, rook, bishop, or knight, of either color;
 # either side to move; no castling rights. Squares and moves are defined in
@@ -71,3 +73,48 @@ law generated_file_has_exact_length:
   for +width: Nat
   for +material: Chess.Material
   {List.length(&2, U32, Tables.file(remaining, width, material)) == Finite.size(width) : Nat}
+
+# KPK extends the domain to a single pawn of either color. Pawn ranks 1 and 8
+# are invalid; promotion replaces the pawn with a queen, rook, bishop or knight.
+# Single pushes need an empty destination. Double pushes are allowed only from
+# the starting rank and need both squares empty. A pawn cannot capture in KPK:
+# its only enemy piece is a king. En passant therefore cannot occur either.
+# Legal king moves enforce occupancy and safety; capturing the pawn draws.
+#
+# Pawn.advance is ACTUAL distance to promotion, not a search-depth cutoff.
+# King moves consume one halfmove. Every pawn move resets the clock to 100,
+# including promotion; the promoted game uses the existing pawnless rules.
+# Recursion decreases (distance, remaining clock), so even with resets it
+# covers the entire game. The same terminal and draw conventions above apply.
+law pawn_legal_moves_are_complete:
+  for +advance: Nat
+  for +position: Pawn.Position
+  for +key: Word(7n)
+  for legal: Game.Truth(Pawn.legal(advance, position, Pawn.action(key)))
+  Pawn.Member(Pawn.after(advance, position, Pawn.action(key)), Pawn.successors(advance, position))
+
+law pawn_legal_moves_are_sound:
+  for +advance: Nat
+  for +position: Pawn.Position
+  for +next: Pawn.Edge
+  for member: Pawn.Member(next, Pawn.successors(advance, position))
+  Pawn.LegalSuccessor(advance, position, next)
+
+# One file contains both pawn colors, using the same 20-bit board index and
+# signed-byte WDL format. The theorem certifies the actual serialized byte list,
+# not an auxiliary evaluator or a board-dependent certificate.
+law generated_kpk_wdl_is_fully_correct:
+  for +limit: Nat
+  for horizon: {limit == 100n : Nat}
+  for +width: Nat
+  for +format: {width == 20n : Nat}
+  for +board: Chess.Board
+  for valid: Game.Truth(Pawn.valid_board(board))
+  Game.CorrectByte(Pawn.tree(limit, board),
+    Finite.read(PawnTables.file(limit, width),
+      Finite.offset(width, Index.encode_at(width, board))))
+
+law generated_kpk_file_has_exact_length:
+  for +limit: Nat
+  for +width: Nat
+  {List.length(&2, U32, PawnTables.file(limit, width)) == Finite.size(width) : Nat}

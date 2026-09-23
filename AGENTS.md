@@ -16,4 +16,4 @@ From most to least important:
 
 ## Scope
 - WDL tables (no DTZ, DTM)
-- Pawnless 3-man positions only
+- Pawnless 3-man positions and KPK (either pawn color)

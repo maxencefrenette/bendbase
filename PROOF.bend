@@ -6,6 +6,9 @@ import ./src/pawnless_chess.bend as Chess
 import ./src/pawnless_index_proof.bend as IndexProof
 import ./src/pawnless_moves_proof.bend as MovesProof
 import ./src/pawnless_tables_proof.bend as TablesProof
+import ./src/pawn_chess.bend as Pawn
+import ./src/pawn_moves_proof.bend as PawnMovesProof
+import ./src/pawn_tables_proof.bend as PawnTablesProof
 
 def Laws.legal_moves_are_complete(material, board, key, legal):
   MovesProof.legal_present(material, board, key, legal)
@@ -26,3 +29,20 @@ def Laws.generated_wdl_is_fully_correct(remaining, horizon, width, format, mater
 
 def Laws.generated_file_has_exact_length(remaining, width, material):
   TablesProof.file_length(remaining, width, material)
+
+def Laws.pawn_legal_moves_are_complete(advance, position, key, legal):
+  PawnMovesProof.legal_present(advance, position, key, legal)
+
+def Laws.pawn_legal_moves_are_sound(advance, position, next, member):
+  PawnMovesProof.present_legal(advance, position, next, member)
+
+def Laws.generated_kpk_wdl_is_fully_correct(limit, horizon, width, format, board, valid):
+  +game = Pawn.tree(limit, board)
+  (Game.evaluate(game),
+    (PawnTablesProof.serialized_value(limit, width, format, board),
+     +player =>
+       (yes => GameProof.sound(game, player, yes),
+        strategy => GameProof.complete(game, player, strategy))))
+
+def Laws.generated_kpk_file_has_exact_length(limit, width):
+  PawnTablesProof.file_length(limit, width)
