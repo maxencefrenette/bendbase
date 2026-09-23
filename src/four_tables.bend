@@ -6,7 +6,7 @@ import ./finite_table.bend as Finite
 import ./pawnless_tables.bend as Bytes
 
 # Pure reference byte-list definition. No four-man generation is invoked by
-# main.bend or PROOF.bend. A practical memoized generator is separate work.
+# main.bend or PROOF.bend. The clock-layer implementation is pawnless_generator.bend.
 def entries(depth: Nat, +width: Nat, +limit: Nat, +moves: Nat, +material: Index.Material,
   keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
   match depth keys:

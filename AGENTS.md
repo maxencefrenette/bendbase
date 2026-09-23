@@ -18,5 +18,6 @@ From most to least important:
 - WDL tables (no DTZ, DTM)
 - Pawnless 3-man positions and KPK (either pawn color)
 - All four-man material configurations: correctness proofs and pure reference byte-list definitions
+- Executable pawnless four-man clock-layer generator, proved equivalent to the reference
 - Four-man stored roots have no castling or en passant rights; en passant is included in continuations
-- Do not generate four-man tables in this proof-only milestone
+- Do not run full four-man table generation unless explicitly requested

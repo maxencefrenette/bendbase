@@ -23,6 +23,7 @@ import ./src/two_pawn_game.bend as TwoPawnGame
 import ./src/two_pawn_tables.bend as TwoPawnTables
 import ./src/two_pawn_moves_proof.bend as TwoPawnMovesProof
 import ./src/two_pawn_tables_proof.bend as TwoPawnProof
+import ./src/pawnless_generator_proof.bend as GeneratorProof
 
 def Laws.legal_moves_are_complete(material, board, key, legal):
   MovesProof.legal_present(material, board, key, legal)
@@ -135,3 +136,17 @@ def Laws.two_pawn_four_wdl_is_fully_correct(limit, horizon, moves, actions, othe
 
 def Laws.two_pawn_four_file_has_exact_length(width, limit, moves, other_moves, profile):
   TwoPawnProof.file_length(width, limit, moves, other_moves, profile)
+
+def Laws.pawnless_four_generator_matches_reference(limit, width, format, low, low_format, moves, material, board):
+  GeneratorProof.pointwise(limit, width, format, low, low_format, moves, material, board)
+
+def Laws.generated_pawnless_four_wdl_is_fully_correct(limit, horizon, moves, actions, width, format, low, low_format, material, board, valid):
+  +game = Four.tree(limit, moves, FourIndex.position(material, board))
+  (Game.evaluate(game),
+    (GeneratorProof.serialized_value(limit, width, format, low, low_format, moves, material, board),
+     +player =>
+       (yes => GameProof.sound(game, player, yes),
+        strategy => GameProof.complete(game, player, strategy))))
+
+def Laws.generated_pawnless_four_file_has_exact_length(limit, width, low, moves, material):
+  GeneratorProof.file_length(limit, width, low, moves, material)

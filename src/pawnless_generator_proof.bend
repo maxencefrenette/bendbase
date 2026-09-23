@@ -1,0 +1,351 @@
+import Base
+import ./game.bend as Game
+import ./pawnless_chess.bend as Three
+import ./pawnless_index.bend as Index
+import ./pawnless_index_proof.bend as IndexProof
+import ./four_index.bend as FourIndex
+import ./four_index_proof.bend as FourIndexProof
+import ./material_chess.bend as Chess
+import ./four_chess.bend as Rules
+import ./four_solver.bend as Solver
+import ./four_solver_proof.bend as SolverProof
+import ./pawnless_generator.bend as Gen
+import ./pawnless_cache_shape.bend as Shape
+import ./finite_table.bend as Finite
+import ./finite_table_proof.bend as FiniteProof
+import ./pawnless_tables.bend as Bytes
+import ./pawnless_tables_proof.bend as Lemmas
+
+def fill_get(depth: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope, +layer: Gen.Layer<width>,
+  +lower: Maybe<&2, Gen.Bundle<low>>, +moves: Nat, +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
+  {Finite.get(depth, Game.Outcome, key, Gen.fill(depth, width, low, scope, layer, lower, moves, keys)) ==
+   Gen.at(width, low, scope, layer, lower, moves, Gen.decode(width, scope, Finite.get(depth, Word(width), key, keys))) : Game.Outcome}:
+  match depth keys key:
+    case 0n word WNil{}:
+      {==}
+    case 1n+rest Finite.Fork{left, right} WCon{False{}, tail}:
+      fill_get(rest, width, low, scope, layer, lower, moves, left, tail)
+    case 1n+rest Finite.Fork{left, right} WCon{True{}, tail}:
+      fill_get(rest, width, low, scope, layer, lower, moves, right, tail)
+
+def fill_lookup(+width: Nat, +low: Nat, +scope: Gen.Scope, +layer: Gen.Layer<width>,
+  +lower: Maybe<&2, Gen.Bundle<low>>, +moves: Nat, +key: Word(width)) ->
+  {Finite.get(width, Game.Outcome, key, Gen.fill(width, width, low, scope, layer, lower, moves, Finite.keys(width))) ==
+   Gen.at(width, low, scope, layer, lower, moves, Gen.decode(width, scope, key)) : Game.Outcome}:
+  %FiniteProof.keys_get(width, key) :
+    {Finite.get(width, Game.Outcome, key, Gen.fill(width, width, low, scope, layer, lower, moves, Finite.keys(width))) ==
+     Gen.at(width, low, scope, layer, lower, moves, Gen.decode(width, scope, _)) : Game.Outcome}
+  fill_get(width, width, low, scope, layer, lower, moves, Finite.keys(width), key)
+
+def generated_get(+remaining: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope,
+  +moves: Nat, +lower: Maybe<&2, Gen.Bundle<low>>, +key: Word(width)) ->
+  {Finite.get(width, Game.Outcome, key, Gen.generate(remaining, width, low, scope, moves, lower)) ==
+   Gen.at(width, low, scope, Gen.phase(remaining, width, low, scope, moves, lower), lower, moves, Gen.decode(width, scope, key)) : Game.Outcome}:
+  match remaining:
+    case 0n:
+      fill_lookup(width, low, scope, Gen.Initial{}, lower, moves, key)
+    case 1n+rest:
+      fill_lookup(width, low, scope, Gen.Next{Gen.generate(rest, width, low, scope, moves, lower)}, lower, moves, key)
+
+def generated_at(+remaining: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope,
+  +moves: Nat, +lower: Maybe<&2, Gen.Bundle<low>>, +key: Word(width), +position: Chess.Position,
+  decoded: {Gen.decode(width, scope, key) == position : Chess.Position}) ->
+  {Finite.get(width, Game.Outcome, key, Gen.generate(remaining, width, low, scope, moves, lower)) ==
+   Gen.at(width, low, scope, Gen.phase(remaining, width, low, scope, moves, lower), lower, moves, position) : Game.Outcome}:
+  %decoded :
+    {Finite.get(width, Game.Outcome, key, Gen.generate(remaining, width, low, scope, moves, lower)) ==
+     Gen.at(width, low, scope, Gen.phase(remaining, width, low, scope, moves, lower), lower, moves, _) : Game.Outcome}
+  generated_get(remaining, width, low, scope, moves, lower, key)
+
+def single_decode(+width: Nat, size: {width == 20n : Nat}, +kind: Three.Material, +actual: Three.Material,
+  +board: Three.Board, same: {actual == kind : Three.Material}) ->
+  {Gen.decode(width, Gen.Single{kind}, Index.encode_at(width, board)) == Chess.from_three(actual, board) : Chess.Position}:
+  Equal.trans(Chess.Position, Gen.decode(width, Gen.Single{kind}, Index.encode_at(width, board)),
+    Chess.from_three(kind, board), Chess.from_three(actual, board),
+    Equal.cong(Three.Board, Chess.Position, b => Chess.from_three(kind, b),
+      Index.decode_at(width, Index.encode_at(width, board)), board, IndexProof.roundtrip_at(width, size, board)),
+    Equal.cong(Three.Material, Chess.Position, k => Chess.from_three(k, board), kind, actual,
+      Equal.sym(Three.Material, actual, kind, same)))
+
+def single_at(+remaining: Nat, +width: Nat, +size: {width == 20n : Nat}, +moves: Nat,
+  +kind: Three.Material, +actual: Three.Material, +board: Three.Board, same: {actual == kind : Three.Material}) ->
+  {Finite.get(width, Game.Outcome, Index.encode_at(width, board), Gen.generate(remaining, width, width, Gen.Single{kind}, moves, None{})) ==
+   Gen.at(width, width, Gen.Single{kind}, Gen.phase(remaining, width, width, Gen.Single{kind}, moves, None{}),
+     None{}, moves, Chess.from_three(actual, board)) : Game.Outcome}:
+  generated_at(remaining, width, width, Gen.Single{kind}, moves, None{}, Index.encode_at(width, board),
+    Chess.from_three(actual, board), single_decode(width, size, kind, actual, board, same))
+
+def single_step(+remaining: Nat, +width: Nat, +size: {width == 20n : Nat}, +moves: Nat,
+  +kind: Three.Material, +actual: Three.Material, +board: Three.Board, same: {actual == kind : Three.Material},
+  children:
+    {Gen.values(Rules.children(Rules.view(moves, Chess.from_three(actual, board))), width, width, Gen.Single{kind},
+       Gen.generate(remaining, width, width, Gen.Single{kind}, moves, None{}), None{}) ==
+     Solver.single(remaining, Rules.children(Rules.view(moves, Chess.from_three(actual, board))), moves) : List<&2, Game.Outcome>}) ->
+  {Finite.get(width, Game.Outcome, Index.encode_at(width, board), Gen.generate(1n+remaining, width, width, Gen.Single{kind}, moves, None{})) ==
+   Solver.combine(Rules.view(moves, Chess.from_three(actual, board)),
+     Solver.single(remaining, Rules.children(Rules.view(moves, Chess.from_three(actual, board))), moves)) : Game.Outcome}:
+  +node = Rules.view(moves, Chess.from_three(actual, board))
+  %children :
+    {Finite.get(width, Game.Outcome, Index.encode_at(width, board), Gen.generate(1n+remaining, width, width, Gen.Single{kind}, moves, None{})) ==
+     Solver.combine(node, _) : Game.Outcome}
+  single_at(1n+remaining, width, size, moves, kind, actual, board, same)
+
+def and_false(+value: Bool) -> {value && False{} == False{} : Bool}:
+  match value:
+    case False{}:
+      {==}
+    case True{}:
+      {==}
+
+def bare_view(+moves: Nat, +turn: Game.Player, +wk: Word(6n), +bk: Word(6n)) ->
+  {Rules.view(moves, Chess.Position{turn, wk, bk, Nil{}}) == Rules.Stop{Game.Draw{}} : Rules.View}:
+  +position = {Chess.Position{turn, wk, bk, Nil{}} : Chess.Position}
+  Equal.cong(Bool, Rules.View, live => Rules.view.live(live, moves, position),
+    Chess.valid(position) && False{}, False{}, and_false(Chess.valid(position)))
+
+def bare_single(remaining: Nat, +moves: Nat, +turn: Game.Player, +wk: Word(6n), +bk: Word(6n)) ->
+  {Game.Draw{} == Solver.first(Solver.single(remaining, Chess.Position{turn, wk, bk, Nil{}} <> Nil{}, moves)) : Game.Outcome}:
+  match remaining:
+    case 0n:
+      Equal.cong(Rules.View, Game.Outcome, node => Game.evaluate(Rules.boundary(node)),
+        Rules.Stop{Game.Draw{}}, Rules.view(moves, Chess.Position{turn, wk, bk, Nil{}}),
+        Equal.sym(Rules.View, Rules.view(moves, Chess.Position{turn, wk, bk, Nil{}}), Rules.Stop{Game.Draw{}}, bare_view(moves, turn, wk, bk)))
+    case 1n++clock:
+      Equal.cong(Rules.View, Game.Outcome, node => Solver.combine(node, Solver.single(clock, Rules.children(node), moves)),
+        Rules.Stop{Game.Draw{}}, Rules.view(moves, Chess.Position{turn, wk, bk, Nil{}}),
+        Equal.sym(Rules.View, Rules.view(moves, Chess.Position{turn, wk, bk, Nil{}}), Rules.Stop{Game.Draw{}}, bare_view(moves, turn, wk, bk)))
+
+# Induction over the clock and a symbolic list, never over all board positions.
+def single_forest(remaining: Nat, +positions: List<&2, Chess.Position>, +width: Nat,
+  +size: {width == 20n : Nat}, +moves: Nat, +kind: Three.Material,
+  all: Shape.All(Gen.Single{kind}, positions)) ->
+  {Gen.values(positions, width, width, Gen.Single{kind}, Gen.generate(remaining, width, width, Gen.Single{kind}, moves, None{}), None{}) ==
+   Solver.single(remaining, positions, moves) : List<&2, Game.Outcome>}:
+  match remaining positions all:
+    case 0n Nil{} _:
+      {==}
+    case 0n Chess.Position{+turn, +wk, +bk, Nil{}} <> +tail Shape.Both{head, rest}:
+      Lemmas.cons_cong(Game.Outcome, Game.Draw{},
+        Solver.first(Solver.single(0n, Chess.Position{turn, wk, bk, Nil{}} <> Nil{}, moves)),
+        Gen.values(tail, width, width, Gen.Single{kind}, Gen.generate(0n, width, width, Gen.Single{kind}, moves, None{}), None{}),
+        Solver.single(0n, tail, moves), bare_single(0n, moves, turn, wk, bk),
+        single_forest(0n, tail, width, size, moves, kind, rest))
+    case 0n Chess.Position{+turn, +wk, +bk, Chess.Man{+owner, +actual, +pc} <> Nil{}} <> +tail Shape.Both{+same, rest}:
+      +board = {Three.Board{owner, turn, wk, bk, pc} : Three.Board}
+      +position = Chess.from_three(actual, board)
+      Lemmas.cons_cong(Game.Outcome,
+        Finite.get(width, Game.Outcome, Index.encode_at(width, board), Gen.generate(0n, width, width, Gen.Single{kind}, moves, None{})),
+        Solver.first(Solver.single(0n, position <> Nil{}, moves)),
+        Gen.values(tail, width, width, Gen.Single{kind}, Gen.generate(0n, width, width, Gen.Single{kind}, moves, None{}), None{}),
+        Solver.single(0n, tail, moves),
+        single_at(0n, width, size, moves, kind, actual, board, same),
+        single_forest(0n, tail, width, size, moves, kind, rest))
+    case 0n Chess.Position{turn, wk, bk, Chess.Man{owner, actual, pc} <> man <> men} <> tail Shape.Both{bad, rest}:
+      match bad:
+    case 1n++clock Nil{} _:
+      {==}
+    case 1n++clock Chess.Position{+turn, +wk, +bk, Nil{}} <> +tail Shape.Both{head, rest}:
+      Lemmas.cons_cong(Game.Outcome, Game.Draw{},
+        Solver.first(Solver.single(1n+clock, Chess.Position{turn, wk, bk, Nil{}} <> Nil{}, moves)),
+        Gen.values(tail, width, width, Gen.Single{kind}, Gen.generate(1n+clock, width, width, Gen.Single{kind}, moves, None{}), None{}),
+        Solver.single(1n+clock, tail, moves), bare_single(1n+clock, moves, turn, wk, bk),
+        single_forest(1n+clock, tail, width, size, moves, kind, rest))
+    case 1n++clock Chess.Position{+turn, +wk, +bk, Chess.Man{+owner, +actual, +pc} <> Nil{}} <> +tail Shape.Both{+same, rest}:
+      +board = {Three.Board{owner, turn, wk, bk, pc} : Three.Board}
+      +position = Chess.from_three(actual, board)
+      Lemmas.cons_cong(Game.Outcome,
+        Finite.get(width, Game.Outcome, Index.encode_at(width, board), Gen.generate(1n+clock, width, width, Gen.Single{kind}, moves, None{})),
+        Solver.first(Solver.single(1n+clock, position <> Nil{}, moves)),
+        Gen.values(tail, width, width, Gen.Single{kind}, Gen.generate(1n+clock, width, width, Gen.Single{kind}, moves, None{}), None{}),
+        Solver.single(1n+clock, tail, moves),
+        single_step(clock, width, size, moves, kind, actual, board, same,
+          single_forest(clock, Rules.children(Rules.view(moves, position)), width, size, moves, kind,
+            Shape.children(moves, Gen.Single{kind}, position, same))),
+        single_forest(1n+clock, tail, width, size, moves, kind, rest))
+    case 1n++clock Chess.Position{turn, wk, bk, Chess.Man{owner, actual, pc} <> man <> men} <> tail Shape.Both{bad, rest}:
+      match bad:
+
+def single_pointwise(+remaining: Nat, +width: Nat, +size: {width == 20n : Nat}, +moves: Nat,
+  +kind: Three.Material, +board: Three.Board) ->
+  {Finite.get(width, Game.Outcome, Index.encode_at(width, board), Gen.generate(remaining, width, width, Gen.Single{kind}, moves, None{})) ==
+   Solver.first(Solver.single(remaining, Chess.from_three(kind, board) <> Nil{}, moves)) : Game.Outcome}:
+  match board:
+    case Three.Board{owner, turn, wk, bk, pc}:
+      +positions = {Chess.from_three(kind, board) <> Nil{} : List<&2, Chess.Position>}
+      Equal.cong(List<&2, Game.Outcome>, Game.Outcome, values => Solver.first(values),
+        Gen.values(positions, width, width, Gen.Single{kind}, Gen.generate(remaining, width, width, Gen.Single{kind}, moves, None{}), None{}),
+        Solver.single(remaining, positions, moves),
+        single_forest(remaining, positions, width, size, moves, kind, Shape.Both{{==}, Unit{}}))
+
+def selected(+remaining: Nat, +width: Nat, +moves: Nat, +kind: Three.Material) ->
+  {Gen.select(width, kind, Gen.singles(remaining, width, moves)) ==
+   Gen.generate(remaining, width, width, Gen.Single{kind}, moves, None{}) : Finite.Table(width, Game.Outcome)}:
+  match kind:
+    case Three.Queen{}:
+      {==}
+    case Three.Rook{}:
+      {==}
+    case Three.Bishop{}:
+      {==}
+    case Three.Knight{}:
+      {==}
+
+def lower_correct(+limit: Nat, +width: Nat, +size: {width == 20n : Nat}, +moves: Nat,
+  +kind: Three.Material, +board: Three.Board) ->
+  {Gen.lower_value(width, Some{Gen.singles(limit, width, moves)}, kind, board) ==
+   Solver.first(Solver.single(limit, Chess.from_three(kind, board) <> Nil{}, moves)) : Game.Outcome}:
+  Equal.trans(Game.Outcome, Gen.lower_value(width, Some{Gen.singles(limit, width, moves)}, kind, board),
+    Finite.get(width, Game.Outcome, Index.encode_at(width, board), Gen.generate(limit, width, width, Gen.Single{kind}, moves, None{})),
+    Solver.first(Solver.single(limit, Chess.from_three(kind, board) <> Nil{}, moves)),
+    Equal.cong(Finite.Table(width, Game.Outcome), Game.Outcome, table => Finite.get(width, Game.Outcome, Index.encode_at(width, board), table),
+      Gen.select(width, kind, Gen.singles(limit, width, moves)), Gen.generate(limit, width, width, Gen.Single{kind}, moves, None{}),
+      selected(limit, width, moves, kind)), single_pointwise(limit, width, size, moves, kind, board))
+
+def rebuild(+material: FourIndex.Material, +turn: Game.Player, +wk: Word(6n), +bk: Word(6n),
+  +owner: Game.Player, +first: Three.Material, +pc: Word(6n), +other: Game.Player, +second: Three.Material, +at: Word(6n),
+  shape: Shape.Men(Chess.Man{owner, first, pc} <> Chess.Man{other, second, at} <> Nil{}, Gen.Double{material})) ->
+  {FourIndex.position(material, FourIndex.Board{Three.Board{owner, turn, wk, bk, pc}, at}) ==
+   Chess.Position{turn, wk, bk, Chess.Man{owner, first, pc} <> Chess.Man{other, second, at} <> Nil{}} : Chess.Position}:
+  match material shape:
+    case FourIndex.Material{+one, +two, +opposed} Shape.Both{a, Shape.Both{b, c}}:
+      %Equal.sym(Three.Material, first, one, a) :
+        {FourIndex.position(material, FourIndex.Board{Three.Board{owner, turn, wk, bk, pc}, at}) ==
+         Chess.Position{turn, wk, bk, Chess.Man{owner, _, pc} <> Chess.Man{other, second, at} <> Nil{}} : Chess.Position}
+      %Equal.sym(Three.Material, second, two, b) :
+        {FourIndex.position(material, FourIndex.Board{Three.Board{owner, turn, wk, bk, pc}, at}) ==
+         Chess.Position{turn, wk, bk, Chess.Man{owner, one, pc} <> Chess.Man{other, _, at} <> Nil{}} : Chess.Position}
+      %Equal.sym(Game.Player, other, Bool.pick(Game.Player, opposed, Three.other(owner), owner), c) :
+        {FourIndex.position(material, FourIndex.Board{Three.Board{owner, turn, wk, bk, pc}, at}) ==
+         Chess.Position{turn, wk, bk, Chess.Man{owner, one, pc} <> Chess.Man{_, two, at} <> Nil{}} : Chess.Position}
+      {==}
+
+def double_at(+remaining: Nat, +width: Nat, +size: {width == 26n : Nat}, +low: Nat,
+  +material: FourIndex.Material, +moves: Nat, +lower: Maybe<&2, Gen.Bundle<low>>, +board: FourIndex.Board,
+  +position: Chess.Position, rebuilt: {FourIndex.position(material, board) == position : Chess.Position}) ->
+  {Finite.get(width, Game.Outcome, FourIndex.encode_at(width, board), Gen.generate(remaining, width, low, Gen.Double{material}, moves, lower)) ==
+   Gen.at(width, low, Gen.Double{material}, Gen.phase(remaining, width, low, Gen.Double{material}, moves, lower), lower, moves, position) : Game.Outcome}:
+  generated_at(remaining, width, low, Gen.Double{material}, moves, lower, FourIndex.encode_at(width, board), position,
+    Equal.trans(Chess.Position, Gen.decode(width, Gen.Double{material}, FourIndex.encode_at(width, board)),
+      FourIndex.position(material, board), position,
+      Equal.cong(FourIndex.Board, Chess.Position, b => FourIndex.position(material, b),
+        FourIndex.decode_at(width, FourIndex.encode_at(width, board)), board, FourIndexProof.roundtrip_at(width, size, board)), rebuilt))
+
+def double_step(+remaining: Nat, +width: Nat, +size: {width == 26n : Nat}, +low: Nat,
+  +material: FourIndex.Material, +moves: Nat, +limit: Nat, +board: FourIndex.Board, +position: Chess.Position,
+  rebuilt: {FourIndex.position(material, board) == position : Chess.Position},
+  children:
+    {Gen.values(Rules.children(Rules.view(moves, position)), width, low, Gen.Double{material},
+       Gen.generate(remaining, width, low, Gen.Double{material}, moves, Some{Gen.singles(limit, low, moves)}), Some{Gen.singles(limit, low, moves)}) ==
+     Solver.forest(remaining, Rules.children(Rules.view(moves, position)), limit, moves) : List<&2, Game.Outcome>}) ->
+  {Finite.get(width, Game.Outcome, FourIndex.encode_at(width, board),
+     Gen.generate(1n+remaining, width, low, Gen.Double{material}, moves, Some{Gen.singles(limit, low, moves)})) ==
+   Solver.combine(Rules.view(moves, position), Solver.forest(remaining, Rules.children(Rules.view(moves, position)), limit, moves)) : Game.Outcome}:
+  %children :
+    {Finite.get(width, Game.Outcome, FourIndex.encode_at(width, board),
+       Gen.generate(1n+remaining, width, low, Gen.Double{material}, moves, Some{Gen.singles(limit, low, moves)})) ==
+     Solver.combine(Rules.view(moves, position), _) : Game.Outcome}
+  double_at(1n+remaining, width, size, low, material, moves, Some{Gen.singles(limit, low, moves)}, board, position, rebuilt)
+
+# The fixed capture bundle is proved at limit, independently of the current
+# reversible clock. Each quiet continuation uses the inductively proved layer.
+def four_forest(remaining: Nat, +positions: List<&2, Chess.Position>, +width: Nat,
+  +size: {width == 26n : Nat}, +low: Nat, +low_size: {low == 20n : Nat}, +moves: Nat,
+  +limit: Nat, +material: FourIndex.Material, all: Shape.All(Gen.Double{material}, positions)) ->
+  {Gen.values(positions, width, low, Gen.Double{material},
+     Gen.generate(remaining, width, low, Gen.Double{material}, moves, Some{Gen.singles(limit, low, moves)}), Some{Gen.singles(limit, low, moves)}) ==
+   Solver.forest(remaining, positions, limit, moves) : List<&2, Game.Outcome>}:
+  match remaining positions material all:
+    case 0n Nil{} _ _:
+      {==}
+    case 0n Chess.Position{turn, wk, bk, Nil{}} <> +tail _ Shape.Both{head, rest}:
+      Lemmas.cons_cong(Game.Outcome, Game.Draw{}, Game.Draw{},
+        Gen.values(tail, width, low, Gen.Double{material}, Gen.generate(0n, width, low, Gen.Double{material}, moves, Some{Gen.singles(limit, low, moves)}), Some{Gen.singles(limit, low, moves)}), Solver.forest(0n, tail, limit, moves), {==}, four_forest(0n, tail, width, size, low, low_size, moves, limit, material, rest))
+    case 0n Chess.Position{+turn, +wk, +bk, Chess.Man{+owner, +kind, +pc} <> Nil{}} <> +tail _ Shape.Both{head, rest}:
+      +board = {Three.Board{owner, turn, wk, bk, pc} : Three.Board}
+      Lemmas.cons_cong(Game.Outcome, Gen.lower_value(low, Some{Gen.singles(limit, low, moves)}, kind, board),
+        Solver.first(Solver.single(limit, Chess.from_three(kind, board) <> Nil{}, moves)),
+        Gen.values(tail, width, low, Gen.Double{material}, Gen.generate(0n, width, low, Gen.Double{material}, moves, Some{Gen.singles(limit, low, moves)}), Some{Gen.singles(limit, low, moves)}), Solver.forest(0n, tail, limit, moves),
+        lower_correct(limit, low, low_size, moves, kind, board), four_forest(0n, tail, width, size, low, low_size, moves, limit, material, rest))
+    case 0n Chess.Position{+turn, +wk, +bk, Chess.Man{+owner, +first, +pc} <> Chess.Man{+other, +second, +at} <> Nil{}} <> +tail _ Shape.Both{+shape, rest}:
+      +board = {FourIndex.Board{Three.Board{owner, turn, wk, bk, pc}, at} : FourIndex.Board}
+      +position = {Chess.Position{turn, wk, bk, Chess.Man{owner, first, pc} <> Chess.Man{other, second, at} <> Nil{}} : Chess.Position}
+      Lemmas.cons_cong(Game.Outcome, Finite.get(width, Game.Outcome, FourIndex.encode_at(width, board), Gen.generate(0n, width, low, Gen.Double{material}, moves, Some{Gen.singles(limit, low, moves)})),
+        Solver.first(Solver.forest(0n, position <> Nil{}, limit, moves)),
+        Gen.values(tail, width, low, Gen.Double{material}, Gen.generate(0n, width, low, Gen.Double{material}, moves, Some{Gen.singles(limit, low, moves)}), Some{Gen.singles(limit, low, moves)}), Solver.forest(0n, tail, limit, moves),
+        double_at(0n, width, size, low, material, moves, Some{Gen.singles(limit, low, moves)}, board, position,
+          rebuild(material, turn, wk, bk, owner, first, pc, other, second, at, shape)),
+        four_forest(0n, tail, width, size, low, low_size, moves, limit, material, rest))
+    case 0n Chess.Position{turn, wk, bk, Chess.Man{oa, ka, xa} <> Chess.Man{ob, kb, xb} <> c <> men} <> tail FourIndex.Material{one, two, opposed} Shape.Both{bad, rest}:
+      match bad:
+    case 1n++clock Nil{} _ _:
+      {==}
+    case 1n++clock Chess.Position{turn, wk, bk, Nil{}} <> +tail _ Shape.Both{head, rest}:
+      Lemmas.cons_cong(Game.Outcome, Game.Draw{}, Game.Draw{},
+        Gen.values(tail, width, low, Gen.Double{material}, Gen.generate(1n+clock, width, low, Gen.Double{material}, moves, Some{Gen.singles(limit, low, moves)}), Some{Gen.singles(limit, low, moves)}), Solver.forest(1n+clock, tail, limit, moves), {==}, four_forest(1n+clock, tail, width, size, low, low_size, moves, limit, material, rest))
+    case 1n++clock Chess.Position{+turn, +wk, +bk, Chess.Man{+owner, +kind, +pc} <> Nil{}} <> +tail _ Shape.Both{head, rest}:
+      +board = {Three.Board{owner, turn, wk, bk, pc} : Three.Board}
+      Lemmas.cons_cong(Game.Outcome, Gen.lower_value(low, Some{Gen.singles(limit, low, moves)}, kind, board),
+        Solver.first(Solver.single(limit, Chess.from_three(kind, board) <> Nil{}, moves)),
+        Gen.values(tail, width, low, Gen.Double{material}, Gen.generate(1n+clock, width, low, Gen.Double{material}, moves, Some{Gen.singles(limit, low, moves)}), Some{Gen.singles(limit, low, moves)}), Solver.forest(1n+clock, tail, limit, moves),
+        lower_correct(limit, low, low_size, moves, kind, board), four_forest(1n+clock, tail, width, size, low, low_size, moves, limit, material, rest))
+    case 1n++clock Chess.Position{+turn, +wk, +bk, Chess.Man{+owner, +first, +pc} <> Chess.Man{+other, +second, +at} <> Nil{}} <> +tail _ Shape.Both{+shape, rest}:
+      +board = {FourIndex.Board{Three.Board{owner, turn, wk, bk, pc}, at} : FourIndex.Board}
+      +position = {Chess.Position{turn, wk, bk, Chess.Man{owner, first, pc} <> Chess.Man{other, second, at} <> Nil{}} : Chess.Position}
+      Lemmas.cons_cong(Game.Outcome, Finite.get(width, Game.Outcome, FourIndex.encode_at(width, board), Gen.generate(1n+clock, width, low, Gen.Double{material}, moves, Some{Gen.singles(limit, low, moves)})),
+        Solver.first(Solver.forest(1n+clock, position <> Nil{}, limit, moves)),
+        Gen.values(tail, width, low, Gen.Double{material}, Gen.generate(1n+clock, width, low, Gen.Double{material}, moves, Some{Gen.singles(limit, low, moves)}), Some{Gen.singles(limit, low, moves)}), Solver.forest(1n+clock, tail, limit, moves),
+        double_step(clock, width, size, low, material, moves, limit, board, position,
+          rebuild(material, turn, wk, bk, owner, first, pc, other, second, at, shape),
+          four_forest(clock, Rules.children(Rules.view(moves, position)), width, size, low, low_size, moves, limit, material,
+            Shape.children(moves, Gen.Double{material}, position, shape))),
+        four_forest(1n+clock, tail, width, size, low, low_size, moves, limit, material, rest))
+    case 1n++clock Chess.Position{turn, wk, bk, Chess.Man{oa, ka, xa} <> Chess.Man{ob, kb, xb} <> c <> men} <> tail FourIndex.Material{one, two, opposed} Shape.Both{bad, rest}:
+      match bad:
+
+def pointwise(+limit: Nat, +width: Nat, +size: {width == 26n : Nat}, +low: Nat,
+  +low_size: {low == 20n : Nat}, +moves: Nat, +material: FourIndex.Material, +board: FourIndex.Board) ->
+  {Finite.get(width, Game.Outcome, FourIndex.encode_at(width, board), Gen.four(limit, width, low, moves, material)) ==
+   Solver.value(limit, moves, FourIndex.position(material, board)) : Game.Outcome}:
+  match material board:
+    case FourIndex.Material{first, second, opposed} FourIndex.Board{Three.Board{owner, turn, wk, bk, pc}, at}:
+      +position = FourIndex.position(material, board)
+      +positions = {position <> Nil{} : List<&2, Chess.Position>}
+      Equal.cong(List<&2, Game.Outcome>, Game.Outcome, values => Solver.first(values),
+        Gen.values(positions, width, low, Gen.Double{material},
+          Gen.generate(limit, width, low, Gen.Double{material}, moves, Some{Gen.singles(limit, low, moves)}), Some{Gen.singles(limit, low, moves)}),
+        Solver.forest(limit, positions, limit, moves),
+        four_forest(limit, positions, width, size, low, low_size, moves, limit, material,
+          Shape.Both{Shape.Both{{==}, Shape.Both{{==}, {==}}}, Unit{}}))
+
+def evaluated(+limit: Nat, +width: Nat, +size: {width == 26n : Nat}, +low: Nat,
+  +low_size: {low == 20n : Nat}, +moves: Nat, +material: FourIndex.Material, +board: FourIndex.Board) ->
+  {Finite.get(width, Game.Outcome, FourIndex.encode_at(width, board), Gen.four(limit, width, low, moves, material)) ==
+   Game.evaluate(Rules.tree(limit, moves, FourIndex.position(material, board))) : Game.Outcome}:
+  Equal.trans(Game.Outcome,
+    Finite.get(width, Game.Outcome, FourIndex.encode_at(width, board), Gen.four(limit, width, low, moves, material)),
+    Solver.value(limit, moves, FourIndex.position(material, board)),
+    Game.evaluate(Rules.tree(limit, moves, FourIndex.position(material, board))),
+    pointwise(limit, width, size, low, low_size, moves, material, board),
+    SolverProof.pointwise(limit, moves, FourIndex.position(material, board)))
+
+def serialized_value(+limit: Nat, +width: Nat, +size: {width == 26n : Nat}, +low: Nat,
+  +low_size: {low == 20n : Nat}, +moves: Nat, +material: FourIndex.Material, +board: FourIndex.Board) ->
+  {Finite.read(Gen.file(limit, width, low, moves, material), Finite.offset(width, FourIndex.encode_at(width, board))) ==
+   Some{Game.byte(Game.evaluate(Rules.tree(limit, moves, FourIndex.position(material, board))))} : Maybe<&2, U32>}:
+  +table = Gen.four(limit, width, low, moves, material)
+  +key = FourIndex.encode_at(width, board)
+  +stored = Finite.get(width, U32, key, Bytes.bytes(width, table))
+  +value = Finite.get(width, Game.Outcome, key, table)
+  +expected = Game.evaluate(Rules.tree(limit, moves, FourIndex.position(material, board)))
+  Equal.trans(Maybe<&2, U32>, Finite.read(Gen.file(limit, width, low, moves, material), Finite.offset(width, key)),
+    Some{stored}, Some{Game.byte(expected)}, FiniteProof.read_go(width, Bytes.bytes(width, table), key, Nil{}),
+    Equal.trans(Maybe<&2, U32>, Some{stored}, Some{Game.byte(value)}, Some{Game.byte(expected)},
+      Equal.cong(U32, Maybe<&2, U32>, byte => Some{byte}, stored, Game.byte(value), Lemmas.bytes_get(width, table, key)),
+      Equal.cong(Game.Outcome, Maybe<&2, U32>, outcome => Some{Game.byte(outcome)}, value, expected,
+        evaluated(limit, width, size, low, low_size, moves, material, board))))
+
+def file_length(+limit: Nat, +width: Nat, +low: Nat, +moves: Nat, +material: FourIndex.Material) ->
+  {List.length(&2, U32, Gen.file(limit, width, low, moves, material)) == Finite.size(width) : Nat}:
+  Equal.trans(Nat, List.length(&2, U32, Gen.file(limit, width, low, moves, material)), Nat.add(Finite.size(width), 0n), Finite.size(width),
+    FiniteProof.length_go(width, Bytes.bytes(width, Gen.four(limit, width, low, moves, material)), Nil{}),
+    Lemmas.add_zero(Finite.size(width)))
