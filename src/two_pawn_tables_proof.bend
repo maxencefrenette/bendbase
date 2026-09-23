@@ -38,13 +38,8 @@ def pointwise(+width: Nat, +format: {width == 26n : Nat}, +limit: Nat, +moves: N
     Finite.get(width, Game.Outcome, key, Tables.generate(width, limit, moves, other_moves, material)),
     Tables.value(limit, moves, other_moves, material, Index.decode_at(width, key)),
     Game.evaluate(Rules.tree(limit, moves, other_moves, Tables.first_advance(board), Tables.second_advance(material, board), Tables.position(material, board))), lookup(width, limit, moves, other_moves, material, key),
-    Equal.trans(Game.Outcome,
-      Tables.value(limit, moves, other_moves, material, Index.decode_at(width, key)),
-      Tables.value(limit, moves, other_moves, material, board),
-      Game.evaluate(Rules.tree(limit, moves, other_moves, Tables.first_advance(board), Tables.second_advance(material, board), Tables.position(material, board))),
-      Equal.cong(Index.Board, Game.Outcome, b => Tables.value(limit, moves, other_moves, material, b),
-        Index.decode_at(width, key), board, IndexProof.roundtrip_at(width, format, board)),
-      {==}))
+    Equal.cong(Index.Board, Game.Outcome, b => Tables.value(limit, moves, other_moves, material, b),
+      Index.decode_at(width, key), board, IndexProof.roundtrip_at(width, format, board)))
 
 def serialized_value(+width: Nat, +format: {width == 26n : Nat}, +limit: Nat, +moves: Nat,
   +other_moves: Nat, +material: Tables.Profile, +board: Index.Board) ->

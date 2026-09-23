@@ -5,12 +5,11 @@ import ./pawnless_index.bend as Index
 import ./four_index.bend as FourIndex
 import ./material_chess.bend as Chess
 import ./four_chess.bend as Rules
-import ./four_solver.bend as Fold
 import ./finite_table.bend as Finite
 import ./pawnless_tables.bend as Bytes
 
 # Clock-layer dynamic programming over the SAME generalized move rules as
-# the four-man reference. No recursive game evaluation occurs in a layer.
+# the chess semantics. No recursive game evaluation occurs in a layer.
 type Scope is Data:
   Single{kind: Three.Material}
   Double{material: FourIndex.Material}
@@ -68,6 +67,15 @@ type Layer<-width: Nat> is Data:
   Initial{}
   Next{previous: Finite.Table(width, Game.Outcome)}
 
+def combine(view: Rules.View, values: List<&2, Game.Outcome>) -> Game.Outcome:
+  match view values:
+    case Rules.Stop{result} _:
+      result
+    case Rules.Play{turn, children} Nil{}:
+      Game.Draw{}
+    case Rules.Play{turn, children} head <> tail:
+      Bytes.fold(tail, turn, head)
+
 def at(+width: Nat, +low: Nat, +scope: Scope, layer: Layer<width>, lower: Maybe<&2, Bundle<low>>,
   moves: Nat, position: Chess.Position) -> Game.Outcome:
   match layer:
@@ -75,7 +83,7 @@ def at(+width: Nat, +low: Nat, +scope: Scope, layer: Layer<width>, lower: Maybe<
       Game.evaluate(Rules.boundary(Rules.view(moves, position)))
     case Next{previous}:
       +node = Rules.view(moves, position)
-      Fold.combine(node, values(Rules.children(node), width, low, scope, previous, lower))
+      combine(node, values(Rules.children(node), width, low, scope, previous, lower))
 
 def fill(depth: Nat, +width: Nat, +low: Nat, +scope: Scope, +layer: Layer<width>,
   +lower: Maybe<&2, Bundle<low>>, +moves: Nat, keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):

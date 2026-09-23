@@ -5,7 +5,7 @@ import ./pawn_chess.bend as Pawn
 import ./material_chess.bend as Material
 import ./four_index.bend as Index
 import ./one_pawn_chess.bend as Chess
-import ./one_pawn_solver.bend as Solver
+import ./one_pawn_game.bend as Rules
 import ./finite_table.bend as Finite
 import ./pawnless_tables.bend as Bytes
 
@@ -26,7 +26,8 @@ def position(profile: Profile, board: Index.Board) -> Chess.Position:
         Material.Man{Bool.pick(Game.Player, opposed, Three.other(owner), owner), kind, at}}
 
 def value(limit: Nat, moves: Nat, other_moves: Nat, profile: Profile, +board: Index.Board) -> Game.Outcome:
-  Solver.value(limit, moves, other_moves, advance(board), position(profile, board))
+  # Specification-only for now: reuse generic minimax, not a duplicate solver.
+  Game.evaluate(Rules.tree(limit, moves, other_moves, advance(board), position(profile, board)))
 
 def entries(depth: Nat, +width: Nat, +limit: Nat, +moves: Nat, +other_moves: Nat, +profile: Profile,
   keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):

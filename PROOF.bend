@@ -14,7 +14,6 @@ import ./src/material_count_proof.bend as CountProof
 import ./src/four_chess.bend as Four
 import ./src/four_index.bend as FourIndex
 import ./src/four_index_proof.bend as FourIndexProof
-import ./src/four_tables_proof.bend as FourProof
 import ./src/one_pawn_game.bend as OnePawnGame
 import ./src/one_pawn_tables.bend as OnePawnTables
 import ./src/one_pawn_moves_proof.bend as OnePawnMovesProof
@@ -86,17 +85,6 @@ def Laws.material_quiet_moves_preserve_count(board, move, quiet):
 def Laws.four_position_index_roundtrip(board):
   FourIndexProof.roundtrip(board)
 
-def Laws.four_wdl_is_fully_correct(limit, horizon, moves, actions, width, format, material, board, valid):
-  +game = Four.tree(limit, moves, FourIndex.position(material, board))
-  (Game.evaluate(game),
-    (FourProof.serialized_value(width, format, limit, moves, material, board),
-     +player =>
-       (yes => GameProof.sound(game, player, yes),
-        strategy => GameProof.complete(game, player, strategy))))
-
-def Laws.four_file_has_exact_length(width, limit, moves, material):
-  FourProof.file_length(width, limit, moves, material)
-
 def Laws.one_pawn_moves_are_complete(width, format, advance, board, move, legal):
   OnePawnMovesProof.every_action(width, format, advance, board, move, legal)
 
@@ -136,9 +124,6 @@ def Laws.two_pawn_four_wdl_is_fully_correct(limit, horizon, moves, actions, othe
 
 def Laws.two_pawn_four_file_has_exact_length(width, limit, moves, other_moves, profile):
   TwoPawnProof.file_length(width, limit, moves, other_moves, profile)
-
-def Laws.pawnless_four_generator_matches_reference(limit, width, format, low, low_format, moves, material, board):
-  GeneratorProof.pointwise(limit, width, format, low, low_format, moves, material, board)
 
 def Laws.generated_pawnless_four_wdl_is_fully_correct(limit, horizon, moves, actions, width, format, low, low_format, material, board, valid):
   +game = Four.tree(limit, moves, FourIndex.position(material, board))

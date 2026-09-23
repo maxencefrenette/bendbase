@@ -17,7 +17,8 @@ From most to least important:
 ## Scope
 - WDL tables (no DTZ, DTM)
 - Pawnless 3-man positions and KPK (either pawn color)
-- All four-man material configurations: correctness proofs and pure reference byte-list definitions
-- Executable pawnless four-man clock-layer generator, proved equivalent to the reference
+- All four-man material configurations: chess semantics and WDL correctness proofs
+- Executable pawnless four-man clock-layer generator, proved directly against the chess semantics
+- Pawn-containing four-man byte lists use the generic game evaluator; no optimized generator yet
 - Four-man stored roots have no castling or en passant rights; en passant is included in continuations
 - Do not run full four-man table generation unless explicitly requested

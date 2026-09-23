@@ -9,7 +9,6 @@ import ./src/pawn_tables.bend as PawnTables
 import ./src/material_chess.bend as Material
 import ./src/four_chess.bend as Four
 import ./src/four_index.bend as FourIndex
-import ./src/four_tables.bend as FourTables
 import ./src/one_pawn_chess.bend as OnePawn
 import ./src/one_pawn_game.bend as OnePawnGame
 import ./src/one_pawn_tables.bend as OnePawnTables
@@ -17,7 +16,6 @@ import ./src/two_pawn_chess.bend as TwoPawn
 import ./src/two_pawn_game.bend as TwoPawnGame
 import ./src/two_pawn_tables.bend as TwoPawnTables
 import ./src/pawnless_generator.bend as PawnlessGenerator
-import ./src/four_solver.bend as FourSolver
 
 # Domain: two kings and one queen, rook, bishop, or knight, of either color;
 # either side to move; no castling rights. Squares and moves are defined in
@@ -208,9 +206,9 @@ law material_quiet_moves_preserve_count:
 # Four.single uses the SAME generalized move rules as Four.forest; it does not
 # assume the unproved equivalence of the old and generalized move predicates.
 #
-# These laws certify the pure reference minimax/byte-list definition.
-# The executable pawnless generator is certified separately below. Neither
-# proof claims Syzygy-level performance or that four-man files have been run.
+# These laws certify the executable generator directly against Four's chess
+# game tree and Game.Forces strategies. There is no intermediate reference solver.
+# No proof claims Syzygy-level performance or that four-man files have been run.
 # main.bend deliberately does NOT generate them; four_main.bend is opt-in.
 # Width 26 gives one byte per board slot; move width 12 covers all source /
 # destination pairs. The index includes both color reversals in each material
@@ -219,26 +217,38 @@ law four_position_index_roundtrip:
   for +board: FourIndex.Board
   {FourIndex.decode(FourIndex.encode(board)) == board : FourIndex.Board}
 
-law four_wdl_is_fully_correct:
+# Executable pawnless four-man generator: clock-layer dynamic programming.
+# Quiet continuations read the preceding layer. Captures read completed
+# generalized three-man tables at clock zero, NOT a decremented four-man layer.
+# Material shape is preserved by every move, so cache lookup cannot silently
+# change either surviving piece's kind or ownership.
+# The three-man dependencies are themselves computed and proved here using
+# the generalized rules; no equivalence with the older three-man engine is assumed.
+# This is executable but not benchmarked: Syzygy-level speed is still a goal,
+# not an established property. No full four-man generation is run for the proof.
+law generated_pawnless_four_wdl_is_fully_correct:
   for +limit: Nat
   for horizon: {limit == 100n : Nat}
   for +moves: Nat
   for actions: {moves == 12n : Nat}
   for +width: Nat
   for +format: {width == 26n : Nat}
+  for +low: Nat
+  for +low_format: {low == 20n : Nat}
   for +material: FourIndex.Material
   for +board: FourIndex.Board
   for valid: Game.Truth(Material.valid(FourIndex.position(material, board)))
   Game.CorrectByte(Four.tree(limit, moves, FourIndex.position(material, board)),
-    Finite.read(FourTables.file(width, limit, moves, material),
+    Finite.read(PawnlessGenerator.file(limit, width, low, moves, material),
       Finite.offset(width, FourIndex.encode_at(width, board))))
 
-law four_file_has_exact_length:
-  for +width: Nat
+law generated_pawnless_four_file_has_exact_length:
   for +limit: Nat
+  for +width: Nat
+  for +low: Nat
   for +moves: Nat
   for +material: FourIndex.Material
-  {List.length(&2, U32, FourTables.file(width, limit, moves, material)) == Finite.size(width) : Nat}
+  {List.length(&2, U32, PawnlessGenerator.file(limit, width, low, moves, material)) == Finite.size(width) : Nat}
 
 # Four-man one-pawn domain: two kings, exactly one pawn, and one Q/R/B/N.
 # Both ownership relations and colors are included. The pawn's actual distance
@@ -257,7 +267,8 @@ law four_file_has_exact_length:
 # budget or assumed table certificate. Lower-material and pawnless games use
 # the definitions already covered above. All terminal/draw conventions remain.
 #
-# This certifies pure reference bytes, not generation speed or any on-disk
+# The byte list uses Game.evaluate on the rules directly, without a duplicate
+# solver. This certifies specification bytes, not generation speed or on-disk
 # four-man files. The 26-bit layout stores the pawn as the first piece; the
 # profile contains the non-pawn kind and whether its owner opposes the pawn.
 # The action width is 8 for this domain and 12 for pawnless continuations.
@@ -330,7 +341,7 @@ law one_pawn_four_file_has_exact_length:
 # The game still includes all EP continuations after future double pushes.
 # Probing roots with EP rights is not supported by this file format.
 # Profile False is KPPK, True is KPKP; both pawn colors are in each 26-bit file.
-# The reference uses generic Game.evaluate directly, whose strategy theorem
+# The byte-list definition uses Game.evaluate directly, whose strategy theorem
 # is already proved for every finite game. No duplicate solver is necessary.
 # No four-man table generation, position enumeration in the proof, performance
 # claim, castling rights, or repetition history is added by this milestone.
@@ -385,49 +396,3 @@ law two_pawn_four_file_has_exact_length:
   for +other_moves: Nat
   for +profile: TwoPawnTables.Profile
   {List.length(&2, U32, TwoPawnTables.file(width, limit, moves, other_moves, profile)) == Finite.size(width) : Nat}
-
-# Executable pawnless four-man generator: clock-layer dynamic programming.
-# Quiet continuations read the preceding layer. Captures read completed
-# generalized three-man tables at clock zero, NOT a decremented four-man layer.
-# Material shape is preserved by every move, so cache lookup cannot silently
-# change either surviving piece's kind or ownership.
-# The three-man dependencies are themselves computed and proved here using
-# the generalized rules; no equivalence with the older three-man engine is assumed.
-# This is executable but not benchmarked: Syzygy-level speed is still a goal,
-# not an established property. No full four-man generation is run for the proof.
-law pawnless_four_generator_matches_reference:
-  for +limit: Nat
-  for +width: Nat
-  for +format: {width == 26n : Nat}
-  for +low: Nat
-  for +low_format: {low == 20n : Nat}
-  for +moves: Nat
-  for +material: FourIndex.Material
-  for +board: FourIndex.Board
-  {Finite.get(width, Game.Outcome, FourIndex.encode_at(width, board),
-     PawnlessGenerator.four(limit, width, low, moves, material)) ==
-   FourSolver.value(limit, moves, FourIndex.position(material, board)) : Game.Outcome}
-
-law generated_pawnless_four_wdl_is_fully_correct:
-  for +limit: Nat
-  for horizon: {limit == 100n : Nat}
-  for +moves: Nat
-  for actions: {moves == 12n : Nat}
-  for +width: Nat
-  for +format: {width == 26n : Nat}
-  for +low: Nat
-  for +low_format: {low == 20n : Nat}
-  for +material: FourIndex.Material
-  for +board: FourIndex.Board
-  for valid: Game.Truth(Material.valid(FourIndex.position(material, board)))
-  Game.CorrectByte(Four.tree(limit, moves, FourIndex.position(material, board)),
-    Finite.read(PawnlessGenerator.file(limit, width, low, moves, material),
-      Finite.offset(width, FourIndex.encode_at(width, board))))
-
-law generated_pawnless_four_file_has_exact_length:
-  for +limit: Nat
-  for +width: Nat
-  for +low: Nat
-  for +moves: Nat
-  for +material: FourIndex.Material
-  {List.length(&2, U32, PawnlessGenerator.file(limit, width, low, moves, material)) == Finite.size(width) : Nat}
