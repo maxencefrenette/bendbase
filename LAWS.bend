@@ -14,6 +14,10 @@ import ./src/pawnless_tables.bend as Tables
 # material draw. Every continuing move consumes one halfmove. At zero remaining
 # halfmoves, an already-delivered mate takes precedence; otherwise the game draws.
 # Clock-zero queries begin with 100 halfmoves remaining, per the agreed convention.
+# A capture is the only possible clock reset in this domain and immediately
+# ends in K vs K, so 100 plies cover every continuing game. Repetition history
+# and optional draw-claim mechanics are not modeled. The stored tables answer
+# clock-zero queries, not queries at arbitrary nonzero halfmove clocks.
 #
 # Game.Forces describes strategies independently of the generator: choose a
 # winning continuation on one's own turn, handle every reply on the other turn.
@@ -44,6 +48,10 @@ law position_index_roundtrip:
 #   byte 1   iff White has a forcing strategy;
 #   byte 255 iff Black has a forcing strategy (-1 as a signed byte);
 #   byte 0   iff neither has one.
+#
+# This certifies the pure byte list passed by table_file.write to File.write_bytes.
+# Execution trusts Bend's checker/compiler/runtime and the operating system's
+# file IO; the theorem does not certify pre-existing files or generation speed.
 law generated_wdl_is_fully_correct:
   for +remaining: Nat
   for horizon: {remaining == 100n : Nat}

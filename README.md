@@ -14,8 +14,8 @@ mise exec -- bend PROOF.bend
 ```
 
 The proof is structural and does not enumerate chess positions. The current
-checker run takes about 0.3 seconds on this container. See
-[CORRECTNESS.md](CORRECTNESS.md) for its scope and proof structure.
+checker run takes about 0.3 seconds on this container. The comments in
+[LAWS.bend](LAWS.bend) document the theorem's scope and execution boundary.
 
 ## Generate
 
