@@ -17,6 +17,21 @@ The proof is structural and does not enumerate chess positions. The current
 checker run takes about 0.4 seconds on this container. The comments in
 [LAWS.bend](LAWS.bend) document the theorem's scope and execution boundary.
 
+## Four-man groundwork
+
+`src/material_chess.bend` provides material-independent pawnless positions and
+move rules: two kings plus a list of colored pieces, with full-board obstruction,
+captures, and king safety. `PROOF.bend` checks move-generation completeness and
+soundness, successor validity, and lossless conversion from three-man boards.
+The move domain is all 12-bit source/destination pairs; the proof keeps this
+domain symbolic rather than checking individual positions.
+
+This is the foundation for four-man generation, not a four-man tablebase yet.
+The existing three-man generators and their proofs remain unchanged. They have
+not migrated to this new move layer, and equivalence of the old and new legality
+predicates is not yet proved. Four-man terminal evaluation, clock-aware solving,
+indexing, serialization, and pawn support are subsequent milestones.
+
 ## Generate
 
 The repository pins Clang through mise. With Bend installed:

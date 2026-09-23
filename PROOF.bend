@@ -9,6 +9,7 @@ import ./src/pawnless_tables_proof.bend as TablesProof
 import ./src/pawn_chess.bend as Pawn
 import ./src/pawn_moves_proof.bend as PawnMovesProof
 import ./src/pawn_tables_proof.bend as PawnTablesProof
+import ./src/material_moves_proof.bend as MaterialProof
 
 def Laws.legal_moves_are_complete(material, board, key, legal):
   MovesProof.legal_present(material, board, key, legal)
@@ -46,3 +47,15 @@ def Laws.generated_kpk_wdl_is_fully_correct(limit, horizon, width, format, board
 
 def Laws.generated_kpk_file_has_exact_length(limit, width):
   PawnTablesProof.file_length(limit, width)
+
+def Laws.material_moves_are_complete(width, format, board, move, legal):
+  MaterialProof.every_action(width, format, board, move, legal)
+
+def Laws.material_moves_are_sound(width, board, next, member):
+  MaterialProof.present_legal(width, board, next, member)
+
+def Laws.material_successors_are_valid(width, board, next, member):
+  MaterialProof.successor_valid(width, board, next, member)
+
+def Laws.material_three_man_roundtrip(material, board):
+  MaterialProof.three_roundtrip(material, board)

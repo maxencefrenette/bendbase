@@ -17,3 +17,5 @@ From most to least important:
 ## Scope
 - WDL tables (no DTZ, DTM)
 - Pawnless 3-man positions and KPK (either pawn color)
+- Material-independent pawnless move-rule groundwork for four-man support;
+  table generation remains three-man until the next milestone

@@ -6,6 +6,7 @@ import ./src/finite_table.bend as Finite
 import ./src/pawnless_tables.bend as Tables
 import ./src/pawn_chess.bend as Pawn
 import ./src/pawn_tables.bend as PawnTables
+import ./src/material_chess.bend as Material
 
 # Domain: two kings and one queen, rook, bishop, or knight, of either color;
 # either side to move; no castling rights. Squares and moves are defined in
@@ -118,3 +119,42 @@ law generated_kpk_file_has_exact_length:
   for +limit: Nat
   for +width: Nat
   {List.length(&2, U32, PawnTables.file(limit, width)) == Finite.size(width) : Nat}
+
+# Foundation for four-man solving: two explicit kings plus an arbitrary list
+# of colored Q/R/B/N pieces. All occupied squares obstruct sliders, friendly
+# destinations and king captures are forbidden, and post-capture king safety
+# is checked on the resulting board. No castling. Pawns continue to use the
+# existing KPK rules; four-man pawn rules and all four-man WDL solving are NOT
+# certified here. Existing three-man solvers have not been switched over.
+#
+# A move is a source/destination pair, independent of material count. Width
+# 12 covers every pair. Keeping it equality-bound avoids expanding the finite
+# key table while checking these structural proofs.
+law material_moves_are_complete:
+  for +width: Nat
+  for format: {width == 12n : Nat}
+  for +board: Material.Position
+  for +move: Material.Action
+  for legal: Game.Truth(Material.legal(board, move))
+  Material.Member(Material.after(board, move), Material.successors(width, board))
+
+law material_moves_are_sound:
+  for +width: Nat
+  for +board: Material.Position
+  for +next: Material.Position
+  for member: Material.Member(next, Material.successors(width, board))
+  Material.LegalSuccessor(width, board, next)
+
+law material_successors_are_valid:
+  for +width: Nat
+  for +board: Material.Position
+  for +next: Material.Position
+  for member: Material.Member(next, Material.successors(width, board))
+  Game.Truth(Material.valid(next))
+
+# Lossless representation bridge, not a claim that the old solvers already
+# use the new rules or a proof of equivalence between both legality predicates.
+law material_three_man_roundtrip:
+  for +material: Chess.Material
+  for +board: Chess.Board
+  {Material.to_three(Material.from_three(material, board)) == Material.Single{material, board} : Material.Projection}
