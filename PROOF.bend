@@ -15,6 +15,10 @@ import ./src/four_chess.bend as Four
 import ./src/four_index.bend as FourIndex
 import ./src/four_index_proof.bend as FourIndexProof
 import ./src/four_tables_proof.bend as FourProof
+import ./src/one_pawn_game.bend as OnePawnGame
+import ./src/one_pawn_tables.bend as OnePawnTables
+import ./src/one_pawn_moves_proof.bend as OnePawnMovesProof
+import ./src/one_pawn_tables_proof.bend as OnePawnProof
 
 def Laws.legal_moves_are_complete(material, board, key, legal):
   MovesProof.legal_present(material, board, key, legal)
@@ -87,3 +91,23 @@ def Laws.four_wdl_is_fully_correct(limit, horizon, moves, actions, width, format
 
 def Laws.four_file_has_exact_length(width, limit, moves, material):
   FourProof.file_length(width, limit, moves, material)
+
+def Laws.one_pawn_moves_are_complete(width, format, advance, board, move, legal):
+  OnePawnMovesProof.every_action(width, format, advance, board, move, legal)
+
+def Laws.one_pawn_moves_are_sound(width, advance, board, next, member):
+  OnePawnMovesProof.present_legal(width, advance, board, next, member)
+
+def Laws.one_pawn_successors_are_safe(width, advance, board, next, member):
+  OnePawnMovesProof.successor_safe(width, advance, board, next, member)
+
+def Laws.one_pawn_four_wdl_is_fully_correct(limit, horizon, moves, actions, other_moves, other_actions, width, format, profile, board, valid):
+  +game = OnePawnGame.tree(limit, moves, other_moves, OnePawnTables.advance(board), OnePawnTables.position(profile, board))
+  (Game.evaluate(game),
+    (OnePawnProof.serialized_value(width, format, limit, moves, other_moves, profile, board),
+     +player =>
+       (yes => GameProof.sound(game, player, yes),
+        strategy => GameProof.complete(game, player, strategy))))
+
+def Laws.one_pawn_four_file_has_exact_length(width, limit, moves, other_moves, profile):
+  OnePawnProof.file_length(width, limit, moves, other_moves, profile)

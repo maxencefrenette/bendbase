@@ -17,5 +17,5 @@ From most to least important:
 ## Scope
 - WDL tables (no DTZ, DTM)
 - Pawnless 3-man positions and KPK (either pawn color)
-- Pawnless four-man correctness proof and pure reference byte-list definition
+- Pawnless and exactly-one-pawn four-man correctness proofs and pure reference byte-list definitions
 - Do not generate four-man tables in this proof-only milestone

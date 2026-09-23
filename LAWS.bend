@@ -10,6 +10,9 @@ import ./src/material_chess.bend as Material
 import ./src/four_chess.bend as Four
 import ./src/four_index.bend as FourIndex
 import ./src/four_tables.bend as FourTables
+import ./src/one_pawn_chess.bend as OnePawn
+import ./src/one_pawn_game.bend as OnePawnGame
+import ./src/one_pawn_tables.bend as OnePawnTables
 
 # Domain: two kings and one queen, rook, bishop, or knight, of either color;
 # either side to move; no castling rights. Squares and moves are defined in
@@ -127,7 +130,7 @@ law generated_kpk_file_has_exact_length:
 # of colored Q/R/B/N pieces. All occupied squares obstruct sliders, friendly
 # destinations and king captures are forbidden, and post-capture king safety
 # is checked on the resulting board. No castling. Pawns continue to use the
-# existing KPK rules; four-man pawn rules are NOT certified here. Existing
+# existing KPK rules; the one-pawn four-man extension is specified below. Existing
 # three-man solvers have not been switched over.
 #
 # A move is a source/destination pair, independent of material count. Width
@@ -230,3 +233,73 @@ law four_file_has_exact_length:
   for +moves: Nat
   for +material: FourIndex.Material
   {List.length(&2, U32, FourTables.file(width, limit, moves, material)) == Finite.size(width) : Nat}
+
+# Four-man one-pawn domain: two kings, exactly one pawn, and one Q/R/B/N.
+# Both ownership relations and colors are included. The pawn's actual distance
+# to promotion determines its rank; ranks 1/8 without promotion are invalid.
+# Sliders see ALL blockers, including the pawn. Pawn attacks are diagonal,
+# independently of blockers or pins. Every move checks post-move king safety.
+# Pawn pushes require empty destinations; double pushes require the starting
+# rank and both squares empty. Diagonal pawn moves require an enemy piece at
+# the destination. Promotion (quiet or capturing) offers all four Q/R/B/N.
+# No en passant is possible with only one pawn; no castling rights are modeled.
+#
+# Quiet king/piece moves consume a halfmove. Pawn moves and captures reset the
+# clock to 100. Capturing the extra piece enters KPK; capturing the pawn enters
+# pawnless three-man chess; promotion enters pawnless three/four-man chess.
+# The well-founded recursion uses actual pawn distance, then clock: no search
+# budget or assumed table certificate. Lower-material and pawnless games use
+# the definitions already covered above. All terminal/draw conventions remain.
+#
+# This certifies pure reference bytes, not generation speed or any on-disk
+# four-man files. The 26-bit layout stores the pawn as the first piece; the
+# profile contains the non-pawn kind and whether its owner opposes the pawn.
+# The action width is 8 for this domain and 12 for pawnless continuations.
+law one_pawn_moves_are_complete:
+  for +width: Nat
+  for format: {width == 8n : Nat}
+  for +advance: Nat
+  for +board: OnePawn.Position
+  for +move: OnePawn.Action
+  for legal: Game.Truth(OnePawn.legal(advance, board, move))
+  OnePawn.Member(OnePawn.after(advance, board, move), OnePawn.successors(width, advance, board))
+
+law one_pawn_moves_are_sound:
+  for +width: Nat
+  for +advance: Nat
+  for +board: OnePawn.Position
+  for +next: OnePawn.Edge
+  for member: OnePawn.Member(next, OnePawn.successors(width, advance, board))
+  OnePawn.LegalSuccessor(width, advance, board, next)
+
+law one_pawn_successors_are_safe:
+  for +width: Nat
+  for +advance: Nat
+  for +board: OnePawn.Position
+  for +next: OnePawn.Edge
+  for member: OnePawn.Member(next, OnePawn.successors(width, advance, board))
+  Game.Truth(OnePawn.safe(advance, next))
+
+law one_pawn_four_wdl_is_fully_correct:
+  for +limit: Nat
+  for horizon: {limit == 100n : Nat}
+  for +moves: Nat
+  for actions: {moves == 8n : Nat}
+  for +other_moves: Nat
+  for other_actions: {other_moves == 12n : Nat}
+  for +width: Nat
+  for +format: {width == 26n : Nat}
+  for +profile: OnePawnTables.Profile
+  for +board: FourIndex.Board
+  for valid: Game.Truth(OnePawn.valid(OnePawnTables.advance(board), OnePawnTables.position(profile, board)))
+  Game.CorrectByte(OnePawnGame.tree(limit, moves, other_moves, OnePawnTables.advance(board), OnePawnTables.position(profile, board)),
+    Finite.read(OnePawnTables.file(width, limit, moves, other_moves, profile),
+      Finite.offset(width, FourIndex.encode_at(width, board))))
+
+law one_pawn_four_file_has_exact_length:
+  for +width: Nat
+  for +limit: Nat
+  for +moves: Nat
+  for +other_moves: Nat
+  for +profile: OnePawnTables.Profile
+  {List.length(&2, U32, OnePawnTables.file(width, limit, moves, other_moves, profile)) == Finite.size(width) : Nat}
