@@ -129,9 +129,17 @@ positions and produces shared clock-solver reset edges, retaining explicit
 failure for missing dependencies. Its proof establishes that every legal reset
 finds its stage in a sufficiently completed schedule, for any component builder,
 and that a registered exact-width material table returns its exact stored value.
-This proves stage coverage, not material-directory completeness or correctness
-of those stored WDL values. Material coverage, full component compilation, and
-the global WDL composition are still pending.
+`src/material_directory.bend` supplies a common bounded material builder and
+connects it to that scheduler. It covers every ordered signature up to the
+non-king piece bound, including pawns, both relative owners, repeated pieces,
+and the empty KK signature. Structural proofs establish directory and schedule
+completeness, and prove legal reset lookup succeeds using only the source-size
+and completed-stage bounds—no assumed registration. Promotion, capture, and EP
+cannot increase the material count, so successors remain within the bound.
+The solver callback supplies the values: their semantic WDL correctness, full
+component compilation, and production integration are still pending. This
+deliberately dense catalog is a correctness-first implementation, not a speed
+or storage-efficiency claim. It has not been run to generate four-man tables.
 A material signature alone does not identify a rank-specific component; the
 common measure is not yet wired into production stage selection.
 Pawnful four-man byte lists still use the game evaluator.

@@ -40,6 +40,16 @@ import ./src/chess_selection_proof.bend as SelectionProof
 import ./src/chess_component_proof.bend as ChessComponentProof
 import ./src/chess_cache_proof.bend as ChessCacheProof
 import ./src/chess_cache.bend as ChessCache
+import ./src/material_directory_proof.bend as MaterialDirectoryProof
+
+def Laws.common_material_directory_is_complete(C, solve, capacity, name, context, bounded):
+  MaterialDirectoryProof.build(~C, ~solve, capacity, name, context, bounded)
+
+def Laws.common_material_schedule_is_complete(C, solve, count, query, capacity, context, name, bounded, material):
+  MaterialDirectoryProof.schedule(~C, ~solve, count, query, capacity, context, name, bounded, material)
+
+def Laws.common_scheduled_resets_always_resolve(C, solve, count, capacity, context, anchor, board, move, legal, reset, bounded, material):
+  MaterialDirectoryProof.reset_resolves(~C, ~solve, count, capacity, context, anchor, board, move, legal, reset, bounded, material)
 
 def Laws.common_reset_stage_is_scheduled(C, build, count, width, context, anchor, board, move, legal, reset, bounded):
   ChessCacheProof.reset_directory(~C, ~build, count, width, context, anchor, board, move, legal, reset, bounded)

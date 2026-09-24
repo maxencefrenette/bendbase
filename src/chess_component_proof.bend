@@ -12,6 +12,7 @@ import ./chess_graph.bend as Graph
 import ./chess_graph_proof.bend as GraphProof
 import ./material_cache.bend as Registry
 import ./position_index.bend as Index
+import ./chess_measure_proof.bend as MeasureProof
 
 def prepend(+anchor: Game.Player, +piece: P.Man, +packed: Address.Packed) ->
   {Component.packed_material(Address.prepend(anchor, piece, packed)) ==
@@ -153,3 +154,42 @@ def routed_width(+anchor: Game.Player, +board: P.Position, +move: Chess.Action,
   %address_component(anchor, board) : {Component.width(_) == Component.address_width(Address.of_position(anchor, board)) : Nat}
   Equal.sym(Nat, Component.address_width(Address.of_position(anchor, board)), Component.width(Component.of_address(Address.of_position(anchor, board))),
     width_agrees(Address.of_position(anchor, board)))
+
+def count_keep(+remove: Bool, +anchor: Game.Player, +piece: P.Man, +tail: List<&2, P.Man>, +before: Nat,
+  bounded: Measure.Le(List.length(&2, P.Descriptor, Component.men(anchor, tail)), before)) ->
+  Measure.Le(List.length(&2, P.Descriptor, Component.men(anchor, Chess.keep(remove, piece, tail))), 1n+before):
+  match remove:
+    case False{}:
+      bounded
+    case True{}:
+      MeasureProof.weaken(List.length(&2, P.Descriptor, Component.men(anchor, tail)), before, bounded)
+
+def count_update(+pieces: List<&2, P.Man>, +anchor: Game.Player, +from: Word(6n), +dest: Word(6n), +choice: Three.Material, +ep: Bool, +victim: Word(6n)) ->
+  Measure.Le(List.length(&2, P.Descriptor, Component.men(anchor, Chess.move_men(pieces, from, dest, choice, ep, victim))),
+    List.length(&2, P.Descriptor, Component.men(anchor, pieces))):
+  match pieces:
+    case Nil{}:
+      Unit{}
+    case P.Man{+owner, kind, +at} <> +tail:
+      count_keep(Chess.equal(at, dest) || (ep && Chess.equal(at, victim)), anchor,
+        Measure.moved(Chess.equal(at, from), owner, kind, at, dest, choice), Chess.move_men(tail, from, dest, choice, ep, victim),
+        List.length(&2, P.Descriptor, Component.men(anchor, tail)), count_update(tail, anchor, from, dest, choice, ep, victim))
+
+# Even promotion replaces a man rather than adding one; captures/EP delete.
+def count_after(+anchor: Game.Player, +board: P.Position, +move: Chess.Action) ->
+  Measure.Le(List.length(&2, P.Descriptor, Component.material(anchor, Chess.after(board, move))),
+    List.length(&2, P.Descriptor, Component.material(anchor, board))):
+  match board move:
+    case P.Position{+turn, wk, bk, pieces, ep, target} Chess.Action{from, +dest, choice}:
+      count_update(pieces, anchor, from, dest, choice, Chess.ep_move(board, move), Chess.shift(Three.other(turn), dest))
+
+def routed_material_count(+anchor: Game.Player, +board: P.Position, +move: Chess.Action) ->
+  Measure.Le(List.length(&2, P.Descriptor, Component.address_material(Graph.address(Graph.route(anchor, board, move)))),
+    List.length(&2, P.Descriptor, Component.material(anchor, board))):
+  %Equal.sym(Address.Address, Graph.address(Graph.route(anchor, board, move)), Address.of_position(anchor, Chess.after(board, move)),
+    GraphProof.edge_address(Chess.resets(board, move), Address.of_position(anchor, Chess.after(board, move)))) :
+    Measure.Le(List.length(&2, P.Descriptor, Component.address_material(_)), List.length(&2, P.Descriptor, Component.material(anchor, board)))
+  %Equal.sym(List<&2, P.Descriptor>, Component.address_material(Address.of_position(anchor, Chess.after(board, move))), Component.material(anchor, Chess.after(board, move)),
+    address_material(anchor, Chess.after(board, move))) :
+    Measure.Le(List.length(&2, P.Descriptor, _), List.length(&2, P.Descriptor, Component.material(anchor, board)))
+  count_after(anchor, board, move)

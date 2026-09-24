@@ -30,12 +30,60 @@ import ./src/component_cache.bend as Components
 import ./src/chess_measure.bend as Measure
 import ./src/chess_component.bend as ChessComponent
 import ./src/chess_cache.bend as ChessCache
+import ./src/material_directory.bend as MaterialDirectory
+
+# The common directory enumerates ordered material signatures, not positions:
+# every non-king kind/relative owner, and every length up to capacity. The
+# solver callback must return the signature's exact-width table. Completeness
+# is independent of its values and does NOT assume that those values are WDL.
+# The scheduled builder now guarantees BOTH stage and material coverage for
+# reset edges. Only source-size and completed-stage bounds remain as premises.
+# Semantic correctness of solve and production-generator integration remain.
+law common_material_directory_is_complete:
+  for ~C: Data
+  for ~solve: @+name: List<&2, Position.Descriptor> -> C -> Finite.Table(MaterialDirectory.width(name), Game.Outcome)
+  for +capacity: Nat
+  for +name: List<&2, Position.Descriptor>
+  for +context: C
+  for bounded: Measure.Le(List.length(&2, Position.Descriptor, name), capacity)
+  {MaterialCache.find(MaterialDirectory.build(~C, ~solve, capacity, context), name) ==
+    Some{MaterialDirectory.entry(~C, ~solve, name, context)} : Maybe<&2, TableCache.Entry>}
+
+law common_material_schedule_is_complete:
+  for ~C: Data
+  for ~solve: @+name: List<&2, Position.Descriptor> -> Nat -> C -> List<&2, Components.Stage> -> Finite.Table(MaterialDirectory.width(name), Game.Outcome)
+  for +count: Nat
+  for +query: Nat
+  for +capacity: Nat
+  for +context: C
+  for +name: List<&2, Position.Descriptor>
+  for bounded: Measure.Le(1n+query, count)
+  for material: Measure.Le(List.length(&2, Position.Descriptor, name), capacity)
+  MaterialDirectory.Available(MaterialDirectory.schedule(~C, ~solve, count, capacity, context), 1n+query, name)
+
+law common_scheduled_resets_always_resolve:
+  for ~C: Data
+  for ~solve: @+name: List<&2, Position.Descriptor> -> Nat -> C -> List<&2, Components.Stage> -> Finite.Table(MaterialDirectory.width(name), Game.Outcome)
+  for +count: Nat
+  for +capacity: Nat
+  for +context: C
+  for +anchor: Game.Player
+  for +board: Position.Position
+  for +move: CommonChess.Action
+  for legal: Game.Truth(CommonChess.legal(board, move))
+  for reset: Game.Truth(CommonChess.resets(board, move))
+  for bounded: Measure.Le(Measure.position(board), 1n+count)
+  for material: Measure.Le(List.length(&2, Position.Descriptor, ChessComponent.material(anchor, board)), capacity)
+  exs value: Game.Outcome
+  {ChessCache.resolve(MaterialDirectory.schedule(~C, ~solve, count, capacity, context), ChessGraph.address(ChessGraph.route(anchor, board, move))) ==
+    Some{value} : Maybe<&2, Game.Outcome>}
 
 # Reset resolution derives its stage from the destination, never a family
 # offset. The scheduler really contains each earlier positive stage. The
-# table-read theorem is conditional on registration of the exact material
-# and width: material-directory completeness and semantic WDL correctness
-# still require the common component builder/induction. None is NOT a draw.
+# table-read theorem below also supports arbitrary externally supplied caches:
+# it is conditional on registration of the exact material and width. The
+# common builder above discharges coverage, but not semantic WDL correctness.
+# None is NOT a draw.
 law common_reset_stage_is_scheduled:
   for ~C: Nat -> Data
   for ~build: @+stage: Nat -> @+width: Nat -> C(width) -> List<&2, Components.Stage> -> List<&2, MaterialCache.Named>
