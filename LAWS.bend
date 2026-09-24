@@ -26,6 +26,53 @@ import ./src/chess_graph.bend as ChessGraph
 import ./src/dependency_engine.bend as Dependencies
 import ./src/table_cache.bend as TableCache
 import ./src/material_cache.bend as MaterialCache
+import ./src/component_cache.bend as Components
+
+# Component identity is (stage, material signature). The generic scheduler
+# stamps completed directories with their stage and exposes only earlier
+# stages to the next builder. KPK's actual generator uses it for pawn pushes
+# and final rank selection; no cache-list offsets encode pawn progress.
+# This is a scheduling invariant, NOT yet a proof that arbitrary N-men legal
+# reset moves decrease some common chess measure. That measure and migration
+# of the common graph remain separate obligations. Existing WDL laws are intact.
+law component_stage_matching_is_exact:
+  for +left: Nat
+  for +right: Nat
+  for matches: Game.Truth(Components.equal(left, right))
+  {left == right : Nat}
+
+law completed_component_resolves_common_address:
+  for +index: Nat
+  for +n: Nat
+  for +material: Position.Material(n)
+  for +key: Word(PositionIndex.width(n))
+  for +table: Finite.Table(PositionIndex.width(n), Game.Outcome)
+  for +tail: List<&2, Components.Stage>
+  {Components.resolve(
+     Components.Stage{index, [MaterialCache.Named{MaterialCache.signature(n, material), TableCache.Entry{PositionIndex.width(n), table}}]} <> tail,
+     index, PositionAddress.Address{n, material, key}) ==
+   Some{Finite.get(PositionIndex.width(n), Game.Outcome, key, table)} : Maybe<&2, Game.Outcome>}
+
+law next_stage_does_not_shadow_previous_component:
+  for +index: Nat
+  for +entries: List<&2, MaterialCache.Named>
+  for +tail: List<&2, Components.Stage>
+  for +name: List<&2, Position.Descriptor>
+  {Components.select(Components.Stage{1n+index, entries} <> tail, index, name) ==
+   Components.select(tail, index, name) : Maybe<&2, TableCache.Entry>}
+
+law pawn_schedule_contains_only_completed_stages:
+  for +count: Nat
+  for +width: Nat
+  for +limit: Nat
+  for +promotions: List<&2, MaterialCache.Named>
+  Components.Before(PawnTables.history(count, width, limit, promotions), 1n+count)
+
+law completed_stage_cache_has_no_current_stage:
+  for +stages: List<&2, Components.Stage>
+  for +current: Nat
+  for earlier: Components.Before(stages, current)
+  {Components.find(stages, current) == None{} : Maybe<&2, List<&2, MaterialCache.Named>>}
 
 # Material lookup compares the entire ordered signature, including relative
 # owners and pawn kinds, and retains missing dependencies as None. This reader

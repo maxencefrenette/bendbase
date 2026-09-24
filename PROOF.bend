@@ -33,6 +33,24 @@ import ./src/chess_graph_proof.bend as ChessGraphProof
 import ./src/dependency_engine_proof.bend as DependencyProof
 import ./src/table_cache_proof.bend as TableCacheProof
 import ./src/material_cache_proof.bend as MaterialCacheProof
+import ./src/component_cache_proof.bend as ComponentCacheProof
+import ./src/pawn_tables.bend as PawnTables
+
+def Laws.component_stage_matching_is_exact(left, right, matches):
+  ComponentCacheProof.equal_reflect(left, right, matches)
+
+def Laws.completed_component_resolves_common_address(index, n, material, key, table, tail):
+  ComponentCacheProof.resolve_head(index, n, material, key, table, tail)
+
+def Laws.next_stage_does_not_shadow_previous_component(index, entries, tail, name):
+  ComponentCacheProof.skip_next(index, entries, tail, name)
+
+def Laws.pawn_schedule_contains_only_completed_stages(count, width, limit, promotions):
+  ComponentCacheProof.schedule_before(~PawnTables.Schedule, ~PawnTables.component,
+    count, width, PawnTables.ScheduleContext{limit, promotions})
+
+def Laws.completed_stage_cache_has_no_current_stage(stages, current, earlier):
+  ComponentCacheProof.current_missing(stages, current, earlier)
 
 def Laws.material_signature_matching_is_exact(left, right, matches):
   MaterialCacheProof.reflect(left, right, matches)

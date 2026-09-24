@@ -12,13 +12,6 @@ def lookup(offset: Nat, -A: Data, cache: List<&2, A>) -> Maybe<&2, A>:
     case 1n+rest table <> tail:
       lookup(rest, A, tail)
 
-def tail(-A: Data, cache: List<&2, A>) -> List<&2, A>:
-  match cache:
-    case Nil{}:
-      Nil{}
-    case head <> rest:
-      rest
-
 # Callers must justify any fallback at their chess boundary. The general
 # lookup above retains failure, so it can also be used by strict resolvers.
 def or_else(-A: Data, fallback: A, found: Maybe<&2, A>) -> A:
@@ -27,9 +20,6 @@ def or_else(-A: Data, fallback: A, found: Maybe<&2, A>) -> A:
       fallback
     case Some{table}:
       table
-
-def get(offset: Nat, -A: Data, fallback: A, cache: List<&2, A>) -> A:
-  or_else(A, fallback, lookup(offset, A, cache))
 
 # Independent components are solved in parallel; the descriptor domain can
 # have any size and is not restricted to Q/R/B/N or three-man tables.

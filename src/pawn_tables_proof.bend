@@ -1,4 +1,6 @@
 import Base
+import ./component_cache_proof.bend as StageProof
+import ./component_cache.bend as Stages
 import ./material_cache.bend as Registry
 import ./table_cache_proof.bend as CacheProof
 import ./table_cache.bend as Cache
@@ -32,7 +34,7 @@ def position_board(+advance: Nat, +position: Pawn.Position) ->
       position_square(owner, turn, wk, bk, Pawn.rank(advance, owner), file)
 
 def lookup_clock(+remaining: Nat, +advance: Nat, +position: Pawn.Position, +width: Nat, +size: {width == 20n : Nat},
-  +lower: List<&2, Cache.Entry>, +promotions: List<&2, Registry.Named>) ->
+  +lower: List<&2, Stages.Stage>, +promotions: List<&2, Registry.Named>) ->
   {Tables.lookup(width, advance, position, Tables.clock(remaining, advance, width, lower, promotions)) ==
    Tables.at(width, Tables.phase(remaining, advance, width, lower, promotions), position) : Game.Outcome}:
   %position_board(advance, position) :
@@ -54,18 +56,29 @@ def draws_get(depth: Nat, +key: Word(depth)) ->
       draws_get(rest, tail)
 
 def top_history(+advance: Nat, +width: Nat, +limit: Nat, +promotions: List<&2, Registry.Named>) ->
-  {Dependencies.get(0n, Cache.Entry, Cache.Entry{width, Tables.draws(width)}, Tables.history(advance, width, limit, promotions)) ==
+  {Tables.completed(advance, width, Tables.history(advance, width, limit, promotions)) ==
    Cache.Entry{width, Tables.solve(advance, limit, width, limit, promotions)} : Cache.Entry}:
   match advance:
     case 0n:
       {==}
     case 1n+prior:
-      {==}
+      Equal.cong(Maybe<&2, Cache.Entry>, Cache.Entry,
+        found => Dependencies.or_else(Cache.Entry, Cache.Entry{width, Tables.draws(width)}, found),
+        Stages.select(Tables.history(advance, width, limit, promotions), advance, Catalog.pawn()),
+        Some{Cache.Entry{width, Tables.solve(advance, limit, width, limit, promotions)}},
+        StageProof.select_head(advance, Catalog.pawn(), Cache.Entry{width, Tables.solve(advance, limit, width, limit, promotions)},
+          Tables.history(prior, width, limit, promotions)))
 
-def earlier_history(+advance: Nat, +width: Nat, +limit: Nat, +promotions: List<&2, Registry.Named>) ->
-  {Dependencies.tail(Cache.Entry, Tables.history(1n+advance, width, limit, promotions)) ==
-   Tables.history(advance, width, limit, promotions) : List<&2, Cache.Entry>}:
-  {==}
+def completed_earlier(+advance: Nat, +width: Nat, +limit: Nat, +promotions: List<&2, Registry.Named>) ->
+  {Tables.completed(advance, width, Tables.history(1n+advance, width, limit, promotions)) ==
+   Tables.completed(advance, width, Tables.history(advance, width, limit, promotions)) : Cache.Entry}:
+  Equal.cong(Maybe<&2, Cache.Entry>, Cache.Entry,
+    found => Dependencies.or_else(Cache.Entry, Cache.Entry{width, Tables.draws(width)}, found),
+    Stages.select(Tables.history(1n+advance, width, limit, promotions), advance, Catalog.pawn()),
+    Stages.select(Tables.history(advance, width, limit, promotions), advance, Catalog.pawn()),
+    StageProof.skip_next(advance,
+      [Registry.Named{Catalog.pawn(), Cache.Entry{width, Tables.solve(1n+advance, limit, width, limit, promotions)}}],
+      Tables.history(advance, width, limit, promotions), Catalog.pawn()))
 
 def promoted_generated(+limit: Nat, +width: Nat, +material: Chess.Material) ->
   {Registry.find(Tables.promotions(limit, width), Catalog.signature(material)) ==
@@ -84,7 +97,7 @@ def sources(+advance: Nat, clock: Nat, +width: Nat, +limit: Nat) -> Tables.Sourc
   +promotions = Tables.promotions(limit, width)
   +lower = Tables.history(advance, width, limit, promotions)
   Tables.Sources{Tables.solve(1n+advance, clock, width, limit, promotions),
-    Dependencies.get(0n, Cache.Entry, Cache.Entry{width, Tables.draws(width)}, lower), Dependencies.get(0n, Cache.Entry, Cache.Entry{width, Tables.draws(width)}, Dependencies.tail(Cache.Entry, lower)), promotions}
+    Tables.completed(advance, width, lower), Tables.completed(Stages.previous(advance), width, lower), promotions}
 
 def lookup_base(+advance: Nat, +position: Pawn.Position, +width: Nat, +size: {width == 20n : Nat}, +limit: Nat) ->
   {Tables.lookup(width, 1n+advance, position, Tables.solve(1n+advance, 0n, width, limit, Tables.promotions(limit, width))) ==
@@ -179,7 +192,7 @@ def push_from_here(+advance: Nat, +clock: Nat, +position: Pawn.Position, +width:
   {Tables.edge_value(1n+advance, Pawn.Push{position}, width, sources(advance, clock, width, limit)) ==
    Game.evaluate(Chess.only(Pawn.forest(advance, limit, 1n, Pawn.Here{position} <> Nil{}, limit))) : Game.Outcome}:
   %Equal.sym(Cache.Entry,
-    Dependencies.get(0n, Cache.Entry, Cache.Entry{width, Tables.draws(width)}, Tables.history(advance, width, limit, Tables.promotions(limit, width))),
+    Tables.completed(advance, width, Tables.history(advance, width, limit, Tables.promotions(limit, width))),
     Cache.Entry{width, Tables.solve(advance, limit, width, limit, Tables.promotions(limit, width))},
     top_history(advance, width, limit, Tables.promotions(limit, width))) :
     {Tables.dependency(width, advance, position, _) ==
@@ -196,6 +209,12 @@ def double_from_here(+advance: Nat, +clock: Nat, +position: Pawn.Position, +widt
     Game.evaluate(Chess.only(Pawn.forest(advance, limit, 1n, Pawn.Here{position} <> Nil{}, limit))) : Game.Outcome}) ->
   {Tables.edge_value(1n+1n+advance, Pawn.DoublePush{position}, width, sources(1n+advance, clock, width, limit)) ==
    Game.evaluate(Chess.only(Pawn.forest(advance, limit, 1n, Pawn.Here{position} <> Nil{}, limit))) : Game.Outcome}:
+  %Equal.sym(Cache.Entry,
+    Tables.completed(advance, width, Tables.history(1n+advance, width, limit, Tables.promotions(limit, width))),
+    Tables.completed(advance, width, Tables.history(advance, width, limit, Tables.promotions(limit, width))),
+    completed_earlier(advance, width, limit, Tables.promotions(limit, width))) :
+    {Tables.dependency(width, advance, position, _) ==
+     Game.evaluate(Chess.only(Pawn.forest(advance, limit, 1n, Pawn.Here{position} <> Nil{}, limit))) : Game.Outcome}
   push_from_here(advance, clock, position, width, limit, correct)
 
 def promotion_correct(+advance: Nat, +clock: Nat, +material: Chess.Material, +board: Chess.Board,
@@ -434,7 +453,7 @@ def forest_correct(+advance: Nat, +remaining: Nat, +stage: Nat, +items: List<&2,
         {==}, forest_correct(1n, 1n+clock, 0n, tail, width, size, limit))
 
 def clock_position(+advance: Nat, +remaining: Nat, +board: Chess.Board, +width: Nat, +size: {width == 20n : Nat},
-  +lower: List<&2, Cache.Entry>, +promotions: List<&2, Registry.Named>) ->
+  +lower: List<&2, Stages.Stage>, +promotions: List<&2, Registry.Named>) ->
   {Finite.get(width, Game.Outcome, Index.encode_at(width, board), Tables.clock(remaining, advance, width, lower, promotions)) ==
    Tables.lookup(width, advance, Pawn.position(board), Tables.clock(remaining, advance, width, lower, promotions)) : Game.Outcome}:
   +position = Pawn.position(board)
@@ -486,14 +505,14 @@ def solved_board(+limit: Nat, +width: Nat, +size: {width == 20n : Nat}, +board: 
     here_from_forest(advance, limit, position, width, limit,
       forest_correct(advance, limit, 1n, Pawn.Here{position} <> Nil{}, width, size, limit)))
 
-def finish_get(depth: Nat, +width: Nat, +ranks: List<&2, Cache.Entry>,
+def finish_get(depth: Nat, +width: Nat, +ranks: List<&2, Stages.Stage>,
   +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
   {Finite.get(depth, Game.Outcome, key, Tables.finish(depth, width, ranks, keys)) ==
    Tables.stored(Pawn.advance(Index.decode_at(width, Finite.get(depth, Word(width), key, keys))), width, ranks,
      Finite.get(depth, Word(width), key, keys)) : Game.Outcome}:
   EngineProof.fill_get(~Tables.RankContext, ~Tables.stored_entry, depth, width, 0n, ranks, keys, key)
 
-def finish_lookup(+width: Nat, +ranks: List<&2, Cache.Entry>, +key: Word(width)) ->
+def finish_lookup(+width: Nat, +ranks: List<&2, Stages.Stage>, +key: Word(width)) ->
   {Finite.get(width, Game.Outcome, key, Tables.finish(width, width, ranks, Finite.keys(width))) ==
    Tables.stored(Pawn.advance(Index.decode_at(width, key)), width, ranks, key) : Game.Outcome}:
   %FiniteProof.keys_get(width, key) :

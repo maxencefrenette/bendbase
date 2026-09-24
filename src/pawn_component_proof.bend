@@ -1,7 +1,7 @@
 import Base
+import ./component_cache.bend as Stages
 import ./material_cache.bend as Registry
 import ./table_cache.bend as Cache
-import ./dependency_engine.bend as Dependencies
 import ./game.bend as Game
 import ./pawn_chess.bend as Pawn
 import ./pawnless_index.bend as Index
@@ -126,13 +126,13 @@ def layer_lookup(+width: Nat, +advance: Nat, +push: Cache.Entry,
         Finite.get(width, Solver.Node<width>, key, graph), node, graph_lookup(width, advance, push, double, promotions, key))),
     compiled_at(advance, width, push, double, promotions, phase, position))
 
-def clock_get(+remaining: Nat, +advance: Nat, +width: Nat, +lower: List<&2, Cache.Entry>,
+def clock_get(+remaining: Nat, +advance: Nat, +width: Nat, +lower: List<&2, Stages.Stage>,
   +promotions: List<&2, Registry.Named>, +key: Word(width)) ->
   {Finite.get(width, Game.Outcome, key, Tables.clock(remaining, advance, width, lower, promotions)) ==
    Tables.at(width, Tables.phase(remaining, advance, width, lower, promotions), Pawn.position(Index.decode_at(width, key))) : Game.Outcome}:
   match remaining:
     case 0n:
-      layer_lookup(width, advance, Dependencies.get(0n, Cache.Entry, Cache.Entry{width, Tables.draws(width)}, lower), Dependencies.get(0n, Cache.Entry, Cache.Entry{width, Tables.draws(width)}, Dependencies.tail(Cache.Entry, lower)), promotions, Solver.Initial{}, key)
+      layer_lookup(width, advance, Tables.completed(Stages.previous(advance), width, lower), Tables.completed(Stages.previous(Stages.previous(advance)), width, lower), promotions, Solver.Initial{}, key)
     case 1n+rest:
-      layer_lookup(width, advance, Dependencies.get(0n, Cache.Entry, Cache.Entry{width, Tables.draws(width)}, lower), Dependencies.get(0n, Cache.Entry, Cache.Entry{width, Tables.draws(width)}, Dependencies.tail(Cache.Entry, lower)), promotions,
+      layer_lookup(width, advance, Tables.completed(Stages.previous(advance), width, lower), Tables.completed(Stages.previous(Stages.previous(advance)), width, lower), promotions,
         Solver.Next{Tables.clock(rest, advance, width, lower, promotions)}, key)

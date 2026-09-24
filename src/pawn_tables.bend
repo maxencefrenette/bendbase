@@ -1,4 +1,5 @@
 import Base
+import ./component_cache.bend as Stages
 import ./material_cache.bend as Registry
 import ./table_cache.bend as Cache
 import ./game.bend as Game
@@ -34,6 +35,11 @@ def draws(depth: Nat) -> Finite.Table(depth, Game.Outcome):
 type Sources<-width: Nat> is Data:
   Sources{quiet: Finite.Table(width, Game.Outcome), push: Cache.Entry,
     double: Cache.Entry, promotions: List<&2, Registry.Named>}
+
+# The chess proof justifies the empty rank-zero boundary. All real stages
+# are addressed by their identifier, not their position in this list.
+def completed(index: Nat, +width: Nat, stages: List<&2, Stages.Stage>) -> Cache.Entry:
+  Dependencies.or_else(Cache.Entry, Cache.Entry{width, draws(width)}, Stages.select(stages, index, Catalog.pawn()))
 
 def lookup(+width: Nat, advance: Nat, position: Pawn.Position,
   table: Finite.Table(width, Game.Outcome)) -> Game.Outcome:
@@ -137,11 +143,11 @@ def graph(+width: Nat, advance: Nat, push: Cache.Entry,
   double: Cache.Entry, promotions: List<&2, Registry.Named>) -> Finite.Table(width, Solver.Node<width>):
   graph_fill(width, width, advance, push, double, promotions, Finite.keys(width))
 
-def clock(remaining: Nat, advance: Nat, +width: Nat,
-  +lower: List<&2, Cache.Entry>, promotions: List<&2, Registry.Named>) -> Finite.Table(width, Game.Outcome):
+def clock(remaining: Nat, +advance: Nat, +width: Nat,
+  +lower: List<&2, Stages.Stage>, promotions: List<&2, Registry.Named>) -> Finite.Table(width, Game.Outcome):
   Solver.generate(remaining, width, graph(width, advance,
-    Dependencies.get(0n, Cache.Entry, Cache.Entry{width, draws(width)}, lower),
-    Dependencies.get(0n, Cache.Entry, Cache.Entry{width, draws(width)}, Dependencies.tail(Cache.Entry, lower)), promotions))
+    completed(Stages.previous(advance), width, lower),
+    completed(Stages.previous(Stages.previous(advance)), width, lower), promotions))
 
 # A proof projection, not another clock evaluator.
 def layer_phase(+width: Nat, advance: Nat, push: Cache.Entry,
@@ -152,15 +158,15 @@ def layer_phase(+width: Nat, advance: Nat, push: Cache.Entry,
     case Solver.Next{previous}:
       Step{advance, Sources{previous, push, double, promotions}}
 
-def phase(remaining: Nat, +advance: Nat, +width: Nat, +lower: List<&2, Cache.Entry>,
+def phase(remaining: Nat, +advance: Nat, +width: Nat, +lower: List<&2, Stages.Stage>,
   +promotions: List<&2, Registry.Named>) -> Layer<width>:
   match remaining:
     case 0n:
       Boundary{advance}
     case 1n+rest:
       Step{advance, Sources{clock(rest, advance, width, lower, promotions),
-        Dependencies.get(0n, Cache.Entry, Cache.Entry{width, draws(width)}, lower),
-        Dependencies.get(0n, Cache.Entry, Cache.Entry{width, draws(width)}, Dependencies.tail(Cache.Entry, lower)), promotions}}
+        completed(Stages.previous(advance), width, lower),
+        completed(Stages.previous(Stages.previous(advance)), width, lower), promotions}}
 
 type ScheduleContext is Data:
   ScheduleContext{limit: Nat, promotions: List<&2, Registry.Named>}
@@ -168,13 +174,13 @@ type ScheduleContext is Data:
 def Schedule(width: Nat) -> Data:
   ScheduleContext
 
-def component(+stage: Nat, +width: Nat, context: Schedule(width), lower: List<&2, Cache.Entry>) -> Cache.Entry:
+def component(+stage: Nat, +width: Nat, context: Schedule(width), lower: List<&2, Stages.Stage>) -> List<&2, Registry.Named>:
   match context:
     case ScheduleContext{limit, promotions}:
-      Cache.Entry{width, clock(limit, stage, width, lower, promotions)}
+      [Registry.Named{Catalog.pawn(), Cache.Entry{width, clock(limit, stage, width, lower, promotions)}}]
 
-def history(advance: Nat, +width: Nat, limit: Nat, promotions: List<&2, Registry.Named>) -> List<&2, Cache.Entry>:
-  Dependencies.history(~Schedule, ~Cache.Family, ~component, advance, width, ScheduleContext{limit, promotions})
+def history(advance: Nat, +width: Nat, limit: Nat, promotions: List<&2, Registry.Named>) -> List<&2, Stages.Stage>:
+  Stages.schedule(~Schedule, ~component, advance, width, ScheduleContext{limit, promotions})
 
 # This projection exposes arbitrary clocks for the proof. The file generator
 # below builds history once and shares its completed tables across all slots.
@@ -186,22 +192,21 @@ def solve(advance: Nat, remaining: Nat, +width: Nat, +limit: Nat,
     case 1n++prior:
       clock(remaining, 1n+prior, width, history(prior, width, limit, promotions), promotions)
 
-def stored(advance: Nat, +width: Nat, ranks: List<&2, Cache.Entry>, key: Word(width)) -> Game.Outcome:
+def stored(advance: Nat, +width: Nat, ranks: List<&2, Stages.Stage>, key: Word(width)) -> Game.Outcome:
   match advance:
     case 0n:
       Game.Draw{}
     case 1n+prior:
-      Cache.value(Cache.lookup(width, key,
-        Dependencies.get(Nat.sub(5n, prior), Cache.Entry, Cache.Entry{width, draws(width)}, ranks)), Game.Draw{})
+      Cache.value(Cache.lookup(width, key, completed(1n+prior, width, ranks)), Game.Draw{})
 
 def RankContext(width: Nat, low: Nat) -> Data:
-  List<&2, Cache.Entry>
+  List<&2, Stages.Stage>
 
-def stored_entry(+width: Nat, +low: Nat, ranks: List<&2, Cache.Entry>, key: Word(width)) -> Game.Outcome:
+def stored_entry(+width: Nat, +low: Nat, ranks: List<&2, Stages.Stage>, key: Word(width)) -> Game.Outcome:
   +word = key
   stored(Pawn.advance(Index.decode_at(width, word)), width, ranks, word)
 
-def finish(depth: Nat, width: Nat, ranks: List<&2, Cache.Entry>,
+def finish(depth: Nat, width: Nat, ranks: List<&2, Stages.Stage>,
   keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
   Engine.fill(~RankContext, ~stored_entry, depth, width, 0n, ranks, keys)
 

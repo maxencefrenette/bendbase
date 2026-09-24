@@ -86,6 +86,14 @@ proofs establish exact signature matching, that every hit names an actual matchi
 entry, and lossless reads of registered common-address tables. Missing signatures
 remain `None`; no table or material class is assumed to exist.
 
+`src/component_cache.bend` adds an explicit stage identifier to each completed
+material directory. KPK uses it for single pushes, double pushes and final rank
+reads; the old list-offset selection and `5 - rank` calculation are removed.
+The common scheduler assigns stage labels itself, and structural proofs establish
+that its completed cache contains only earlier stages. A newer stage cannot
+shadow a requested older component, and the current stage cannot be read from
+that earlier-stage cache. The staged reader also accepts common N-men addresses.
+
 Adapters retain their move rules, indexing, and choice of dependency strata.
 Captures read completed lower-material tables. KPK solves ranks nearest promotion first,
 so pawn pushes and promotions read completed tables at a fresh clock, while quiet
@@ -103,10 +111,11 @@ not assign WDL outcomes to missing dependencies.
 This consolidates clock solving and scheduling machinery, not the whole chess pipeline.
 Graph builders still own legacy move rules, indexing and chess-specific routing.
 The common scheduler executes a supplied order; it does not discover or prove
-an N-men dependency order. Material-address reads are implemented, but choosing
-the correct completed pawn-progress stratum and compiling the common graph into
-the clock solver still remain. A material signature alone does not identify a
-rank-specific component; the scheduler must supply the appropriate directory.
+an N-men dependency order. Stage-and-material reads are implemented and used by
+KPK, but deriving a decreasing stage measure from arbitrary common chess moves
+and compiling the common graph into the clock solver still remain. A material
+signature alone does not identify a rank-specific component; stage identifiers
+are explicit and cannot yet be derived generically from the common position.
 Pawnful four-man byte lists still use the game evaluator.
 
 ### Toward an N-men solver
