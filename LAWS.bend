@@ -24,6 +24,27 @@ import ./src/clock_solver.bend as ClockSolver
 import ./src/position_address.bend as PositionAddress
 import ./src/chess_graph.bend as ChessGraph
 import ./src/dependency_engine.bend as Dependencies
+import ./src/table_cache.bend as TableCache
+
+# Completed dependencies carry their own index width. Captures, promotions
+# and pawn advances all use this lookup in the executable generators. A key
+# is neither truncated nor padded to fit another component. Component/material
+# selection is still an adapter obligation, separate from these indexing laws.
+law completed_dependency_lookup_is_exact:
+  for +width: Nat
+  for +key: Word(width)
+  for +table: Finite.Table(width, Game.Outcome)
+  {TableCache.lookup(width, key, TableCache.Entry{width, table}) ==
+   Some{Finite.get(width, Game.Outcome, key, table)} : Maybe<&2, Game.Outcome>}
+
+law successful_dependency_lookup_has_matching_width:
+  for +stored_width: Nat
+  for +query_width: Nat
+  for +key: Word(query_width)
+  for +table: Finite.Table(stored_width, Game.Outcome)
+  for +result: Game.Outcome
+  for found: {TableCache.lookup(query_width, key, TableCache.Entry{stored_width, table}) == Some{result} : Maybe<&2, Game.Outcome>}
+  {stored_width == query_width : Nat}
 
 # Shared dependency storage is not a chess-specific bundle or rank datatype.
 # These cache laws and the generic family/history proofs cover arbitrary

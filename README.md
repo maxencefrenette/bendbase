@@ -70,6 +70,14 @@ schedule, and cache traversal. These operations are generic over payload types,
 not limited to a fixed piece count or table width. Structural proofs establish
 family lookup, exact schedule length, and preservation of every completed stage.
 
+`src/table_cache.bend` stores completed tables with their own runtime index
+widths, so one family or history can contain different-sized components. Capture,
+promotion, pawn-push and final KPK rank lookups all use the same exact-width reader.
+Its structural proofs show both that matching keys return the stored value and
+that successful reads cannot have mismatched widths. Keys are never padded or
+truncated by this cache. Existing WDL proofs show the adapters select the right
+entries and do not take the width-mismatch fallback during valid generation.
+
 Adapters retain their move rules, indexing, and choice of dependency strata.
 Captures read completed lower-material tables. KPK solves ranks nearest promotion first,
 so pawn pushes and promotions read completed tables at a fresh clock, while quiet

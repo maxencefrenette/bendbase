@@ -31,6 +31,13 @@ import ./src/clock_solver_proof.bend as ClockSolverProof
 import ./src/position_address_proof.bend as PositionAddressProof
 import ./src/chess_graph_proof.bend as ChessGraphProof
 import ./src/dependency_engine_proof.bend as DependencyProof
+import ./src/table_cache_proof.bend as TableCacheProof
+
+def Laws.completed_dependency_lookup_is_exact(width, key, table):
+  TableCacheProof.exact(width, key, table)
+
+def Laws.successful_dependency_lookup_has_matching_width(stored_width, query_width, key, table, result, found):
+  TableCacheProof.width_matches(stored_width, query_width, key, table, result, found)
 
 def Laws.dependency_cache_returns_completed_value(A, value, cache):
   DependencyProof.lookup_head(A, value, cache)

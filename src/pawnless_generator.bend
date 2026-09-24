@@ -1,4 +1,5 @@
 import Base
+import ./table_cache.bend as Cache
 import ./game.bend as Game
 import ./pawnless_chess.bend as Three
 import ./pawnless_index.bend as Index
@@ -24,14 +25,14 @@ def decode(+width: Nat, scope: Scope, key: Word(width)) -> Chess.Position:
     case Double{material}:
       FourIndex.position(material, FourIndex.decode_at(width, key))
 
-def lower_value(+width: Nat, lower: Maybe<&2, Finite.Table(2n, Finite.Table(width, Game.Outcome))>, kind: Three.Material, board: Three.Board) -> Game.Outcome:
+def lower_value(+width: Nat, lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, kind: Three.Material, board: Three.Board) -> Game.Outcome:
   match lower:
     case None{}:
       Game.Draw{}
     case Some{bundle}:
-      Finite.get(width, Game.Outcome, Index.encode_at(width, board), Finite.get(2n, Finite.Table(width, Game.Outcome), Catalog.key(kind), bundle))
+      Cache.value(Cache.lookup(width, Index.encode_at(width, board), Finite.get(2n, Cache.Entry, Catalog.key(kind), bundle)), Game.Draw{})
 
-def edge(+width: Nat, +low: Nat, scope: Scope, lower: Maybe<&2, Finite.Table(2n, Finite.Table(low, Game.Outcome))>, position: Chess.Position) -> Solver.Edge<width>:
+def edge(+width: Nat, +low: Nat, scope: Scope, lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, position: Chess.Position) -> Solver.Edge<width>:
   match scope position:
     case Single{kind} Chess.Position{turn, wk, bk, Chess.Man{owner, actual, pc} <> Nil{}}:
       Solver.Quiet{Index.encode_at(width, Three.Board{owner, turn, wk, bk, pc})}
@@ -43,11 +44,11 @@ def edge(+width: Nat, +low: Nat, scope: Scope, lower: Maybe<&2, Finite.Table(2n,
       Solver.Reset{Game.Draw{}}
 
 def lookup(+width: Nat, +low: Nat, scope: Scope, previous: Finite.Table(width, Game.Outcome),
-  lower: Maybe<&2, Finite.Table(2n, Finite.Table(low, Game.Outcome))>, position: Chess.Position) -> Game.Outcome:
+  lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, position: Chess.Position) -> Game.Outcome:
   Solver.edge_value(width, edge(width, low, scope, lower, position), previous)
 
 def values(positions: List<&2, Chess.Position>, +width: Nat, +low: Nat, +scope: Scope,
-  +previous: Finite.Table(width, Game.Outcome), +lower: Maybe<&2, Finite.Table(2n, Finite.Table(low, Game.Outcome))>) -> List<&2, Game.Outcome>:
+  +previous: Finite.Table(width, Game.Outcome), +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>) -> List<&2, Game.Outcome>:
   match positions:
     case Nil{}:
       Nil{}
@@ -63,7 +64,7 @@ def combine(view: Rules.View, values: List<&2, Game.Outcome>) -> Game.Outcome:
     case Rules.Play{turn, children} head <> tail:
       Engine.fold(tail, turn, head)
 
-def at(+width: Nat, +low: Nat, +scope: Scope, layer: Solver.Layer<width>, lower: Maybe<&2, Finite.Table(2n, Finite.Table(low, Game.Outcome))>,
+def at(+width: Nat, +low: Nat, +scope: Scope, layer: Solver.Layer<width>, lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>,
   moves: Nat, position: Chess.Position) -> Game.Outcome:
   match layer:
     case Solver.Initial{}:
@@ -73,14 +74,14 @@ def at(+width: Nat, +low: Nat, +scope: Scope, layer: Solver.Layer<width>, lower:
       combine(node, values(Rules.children(node), width, low, scope, previous, lower))
 
 def edges(positions: List<&2, Chess.Position>, +width: Nat, +low: Nat, +scope: Scope,
-  +lower: Maybe<&2, Finite.Table(2n, Finite.Table(low, Game.Outcome))>) -> List<&2, Solver.Edge<width>>:
+  +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>) -> List<&2, Solver.Edge<width>>:
   match positions:
     case Nil{}:
       Nil{}
     case head <> tail:
       edge(width, low, scope, lower, head) <> edges(tail, width, low, scope, lower)
 
-def node(+width: Nat, low: Nat, scope: Scope, lower: Maybe<&2, Finite.Table(2n, Finite.Table(low, Game.Outcome))>, view: Rules.View) -> Solver.Node<width>:
+def node(+width: Nat, low: Nat, scope: Scope, lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, view: Rules.View) -> Solver.Node<width>:
   match view:
     case Rules.Stop{result}:
       Solver.Terminal{result}
@@ -88,7 +89,7 @@ def node(+width: Nat, low: Nat, scope: Scope, lower: Maybe<&2, Finite.Table(2n, 
       Solver.Choice{turn, edges(positions, width, low, scope, lower)}
 
 def graph_fill(depth: Nat, +width: Nat, +low: Nat, +scope: Scope, +moves: Nat,
-  +lower: Maybe<&2, Finite.Table(2n, Finite.Table(low, Game.Outcome))>, keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Solver.Node<width>):
+  +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Solver.Node<width>):
   match depth keys:
     case 0n key:
       node(width, low, scope, lower, Rules.view(moves, decode(width, scope, key)))
@@ -96,15 +97,15 @@ def graph_fill(depth: Nat, +width: Nat, +low: Nat, +scope: Scope, +moves: Nat,
       a b = graph_fill(rest, width, low, scope, moves, lower, left) graph_fill(rest, width, low, scope, moves, lower, right)
       Finite.Fork{a, b}
 
-def graph(+width: Nat, low: Nat, scope: Scope, moves: Nat, lower: Maybe<&2, Finite.Table(2n, Finite.Table(low, Game.Outcome))>) -> Finite.Table(width, Solver.Node<width>):
+def graph(+width: Nat, low: Nat, scope: Scope, moves: Nat, lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>) -> Finite.Table(width, Solver.Node<width>):
   graph_fill(width, width, low, scope, moves, lower, Finite.keys(width))
 
 def generate(remaining: Nat, +width: Nat, low: Nat, scope: Scope, moves: Nat,
-  lower: Maybe<&2, Finite.Table(2n, Finite.Table(low, Game.Outcome))>) -> Finite.Table(width, Game.Outcome):
+  lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>) -> Finite.Table(width, Game.Outcome):
   Solver.generate(remaining, width, graph(width, low, scope, moves, lower))
 
 def phase(remaining: Nat, +width: Nat, +low: Nat, +scope: Scope, +moves: Nat,
-  +lower: Maybe<&2, Finite.Table(2n, Finite.Table(low, Game.Outcome))>) -> Solver.Layer<width>:
+  +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>) -> Solver.Layer<width>:
   match remaining:
     case 0n:
       Solver.Initial{}
@@ -117,18 +118,18 @@ type FamilyContext is Data:
 def Family(width: Nat) -> Data:
   FamilyContext
 
-def single_entry(+width: Nat, context: Family(width), kind: Three.Material) -> Finite.Table(width, Game.Outcome):
+def single_entry(+width: Nat, context: Family(width), kind: Three.Material) -> Cache.Entry:
   match context:
     case FamilyContext{limit, moves}:
-      generate(limit, width, width, Single{kind}, moves, None{})
+      Cache.Entry{width, generate(limit, width, width, Single{kind}, moves, None{})}
 
-def singles(limit: Nat, +width: Nat, moves: Nat) -> Finite.Table(2n, Finite.Table(width, Game.Outcome)):
-  Dependencies.family(~Three.Material, ~Family, ~Solver.Table, ~single_entry, 2n, width, FamilyContext{limit, moves}, Catalog.pieces())
+def singles(limit: Nat, +width: Nat, moves: Nat) -> Finite.Table(2n, Cache.Entry):
+  Dependencies.family(~Three.Material, ~Family, ~Cache.Family, ~single_entry, 2n, width, FamilyContext{limit, moves}, Catalog.pieces())
 
 def four(+limit: Nat, width: Nat, +low: Nat, +moves: Nat, material: FourIndex.Material) -> Finite.Table(width, Game.Outcome):
   generate(limit, width, low, Double{material}, moves, Some{singles(limit, low, moves)})
 
-def file_with(limit: Nat, +width: Nat, low: Nat, moves: Nat, material: FourIndex.Material, lower: Finite.Table(2n, Finite.Table(low, Game.Outcome))) -> List<&2, U32>:
+def file_with(limit: Nat, +width: Nat, low: Nat, moves: Nat, material: FourIndex.Material, lower: Finite.Table(2n, Cache.Entry)) -> List<&2, U32>:
   Finite.flatten(width, Engine.bytes(width, generate(limit, width, low, Double{material}, moves, Some{lower})))
 
 def file(+limit: Nat, +width: Nat, +low: Nat, +moves: Nat, material: FourIndex.Material) -> List<&2, U32>:

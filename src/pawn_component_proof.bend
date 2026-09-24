@@ -1,4 +1,5 @@
 import Base
+import ./table_cache.bend as Cache
 import ./dependency_engine.bend as Dependencies
 import ./game.bend as Game
 import ./pawn_chess.bend as Pawn
@@ -10,8 +11,8 @@ import ./finite_table_proof.bend as FiniteProof
 import ./clock_solver.bend as Solver
 import ./clock_solver_proof.bend as SolverProof
 
-def graph_get(depth: Nat, +width: Nat, +advance: Nat, +push: Finite.Table(width, Game.Outcome),
-  +double: Finite.Table(width, Game.Outcome), +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome)),
+def graph_get(depth: Nat, +width: Nat, +advance: Nat, +push: Cache.Entry,
+  +double: Cache.Entry, +promotions: Finite.Table(2n, Cache.Entry),
   +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
   {Finite.get(depth, Solver.Node<width>, key, Tables.graph_fill(depth, width, advance, push, double, promotions, keys)) ==
    Tables.node(advance, width, push, double, promotions,
@@ -24,8 +25,8 @@ def graph_get(depth: Nat, +width: Nat, +advance: Nat, +push: Finite.Table(width,
     case 1n+rest Finite.Fork{left, right} WCon{True{}, tail}:
       graph_get(rest, width, advance, push, double, promotions, right, tail)
 
-def graph_lookup(+width: Nat, +advance: Nat, +push: Finite.Table(width, Game.Outcome),
-  +double: Finite.Table(width, Game.Outcome), +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome)), +key: Word(width)) ->
+def graph_lookup(+width: Nat, +advance: Nat, +push: Cache.Entry,
+  +double: Cache.Entry, +promotions: Finite.Table(2n, Cache.Entry), +key: Word(width)) ->
   {Finite.get(width, Solver.Node<width>, key, Tables.graph(width, advance, push, double, promotions)) ==
    Tables.node(advance, width, push, double, promotions, Pawn.view(advance, Pawn.position(Index.decode_at(width, key)))) : Solver.Node<width>}:
   %FiniteProof.keys_get(width, key) :
@@ -34,7 +35,7 @@ def graph_lookup(+width: Nat, +advance: Nat, +push: Finite.Table(width, Game.Out
   graph_get(width, width, advance, push, double, promotions, Finite.keys(width), key)
 
 def edge_values(items: List<&2, Pawn.Task>, +advance: Nat, +width: Nat, +previous: Finite.Table(width, Game.Outcome),
-  +push: Finite.Table(width, Game.Outcome), +double: Finite.Table(width, Game.Outcome), +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome))) ->
+  +push: Cache.Entry, +double: Cache.Entry, +promotions: Finite.Table(2n, Cache.Entry)) ->
   {Solver.values(width, Tables.edges(items, advance, width, push, double, promotions), previous) ==
    Tables.values(items, advance, width, Tables.Sources{previous, push, double, promotions}) : List<&2, Game.Outcome>}:
   match items:
@@ -52,8 +53,8 @@ def edge_values(items: List<&2, Pawn.Task>, +advance: Nat, +width: Nat, +previou
         Tables.values(tail, advance, width, Tables.Sources{previous, push, double, promotions}),
         {==}, edge_values(tail, advance, width, previous, push, double, promotions))
 
-def compiled_combine(+advance: Nat, +width: Nat, +push: Finite.Table(width, Game.Outcome),
-  +double: Finite.Table(width, Game.Outcome), +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome)),
+def compiled_combine(+advance: Nat, +width: Nat, +push: Cache.Entry,
+  +double: Cache.Entry, +promotions: Finite.Table(2n, Cache.Entry),
   +view: Pawn.View, +values: List<&2, Game.Outcome>) ->
   {Solver.combine(width, Tables.node(1n+advance, width, push, double, promotions, view), values) == Tables.combine(view, values) : Game.Outcome}:
   match view values:
@@ -64,8 +65,8 @@ def compiled_combine(+advance: Nat, +width: Nat, +push: Finite.Table(width, Game
     case Pawn.Play{turn, children} head <> tail:
       {==}
 
-def compiled_boundary(+advance: Nat, +width: Nat, +push: Finite.Table(width, Game.Outcome),
-  +double: Finite.Table(width, Game.Outcome), +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome)), +view: Pawn.View) ->
+def compiled_boundary(+advance: Nat, +width: Nat, +push: Cache.Entry,
+  +double: Cache.Entry, +promotions: Finite.Table(2n, Cache.Entry), +view: Pawn.View) ->
   {Solver.boundary(width, Tables.node(1n+advance, width, push, double, promotions, view)) == Game.evaluate(Pawn.boundary(view)) : Game.Outcome}:
   match view:
     case Pawn.Stop{result}:
@@ -74,8 +75,8 @@ def compiled_boundary(+advance: Nat, +width: Nat, +push: Finite.Table(width, Gam
       {==}
 
 def compiled_step(+advance: Nat, +width: Nat, +previous: Finite.Table(width, Game.Outcome),
-  +push: Finite.Table(width, Game.Outcome), +double: Finite.Table(width, Game.Outcome),
-  +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome)), +view: Pawn.View) ->
+  +push: Cache.Entry, +double: Cache.Entry,
+  +promotions: Finite.Table(2n, Cache.Entry), +view: Pawn.View) ->
   {Solver.at(width, Solver.Next{previous}, Tables.node(1n+advance, width, push, double, promotions, view)) ==
    Tables.combine(view, Tables.values(Pawn.tasks(view), 1n+advance, width, Tables.Sources{previous, push, double, promotions})) : Game.Outcome}:
   match view:
@@ -91,8 +92,8 @@ def compiled_step(+advance: Nat, +width: Nat, +previous: Finite.Table(width, Gam
           edge_values(Pawn.tasks(view), 1n+advance, width, previous, push, double, promotions)),
         compiled_combine(advance, width, push, double, promotions, view, values))
 
-def compiled_at(+advance: Nat, +width: Nat, +push: Finite.Table(width, Game.Outcome),
-  +double: Finite.Table(width, Game.Outcome), +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome)),
+def compiled_at(+advance: Nat, +width: Nat, +push: Cache.Entry,
+  +double: Cache.Entry, +promotions: Finite.Table(2n, Cache.Entry),
   +phase: Solver.Layer<width>, +position: Pawn.Position) ->
   {Solver.at(width, phase, Tables.node(advance, width, push, double, promotions, Pawn.view(advance, position))) ==
    Tables.at(width, Tables.layer_phase(width, advance, push, double, promotions, phase), position) : Game.Outcome}:
@@ -106,8 +107,8 @@ def compiled_at(+advance: Nat, +width: Nat, +push: Finite.Table(width, Game.Outc
     case 1n+prior Solver.Next{previous}:
       compiled_step(prior, width, previous, push, double, promotions, Pawn.view(1n+prior, position))
 
-def layer_lookup(+width: Nat, +advance: Nat, +push: Finite.Table(width, Game.Outcome),
-  +double: Finite.Table(width, Game.Outcome), +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome)), +phase: Solver.Layer<width>, +key: Word(width)) ->
+def layer_lookup(+width: Nat, +advance: Nat, +push: Cache.Entry,
+  +double: Cache.Entry, +promotions: Finite.Table(2n, Cache.Entry), +phase: Solver.Layer<width>, +key: Word(width)) ->
   {Finite.get(width, Game.Outcome, key, Solver.layer(width, Tables.graph(width, advance, push, double, promotions), phase)) ==
    Tables.at(width, Tables.layer_phase(width, advance, push, double, promotions, phase), Pawn.position(Index.decode_at(width, key))) : Game.Outcome}:
   +graph = Tables.graph(width, advance, push, double, promotions)
@@ -124,13 +125,13 @@ def layer_lookup(+width: Nat, +advance: Nat, +push: Finite.Table(width, Game.Out
         Finite.get(width, Solver.Node<width>, key, graph), node, graph_lookup(width, advance, push, double, promotions, key))),
     compiled_at(advance, width, push, double, promotions, phase, position))
 
-def clock_get(+remaining: Nat, +advance: Nat, +width: Nat, +lower: List<&2, Finite.Table(width, Game.Outcome)>,
-  +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome)), +key: Word(width)) ->
+def clock_get(+remaining: Nat, +advance: Nat, +width: Nat, +lower: List<&2, Cache.Entry>,
+  +promotions: Finite.Table(2n, Cache.Entry), +key: Word(width)) ->
   {Finite.get(width, Game.Outcome, key, Tables.clock(remaining, advance, width, lower, promotions)) ==
    Tables.at(width, Tables.phase(remaining, advance, width, lower, promotions), Pawn.position(Index.decode_at(width, key))) : Game.Outcome}:
   match remaining:
     case 0n:
-      layer_lookup(width, advance, Dependencies.get(0n, Finite.Table(width, Game.Outcome), Tables.draws(width), lower), Dependencies.get(0n, Finite.Table(width, Game.Outcome), Tables.draws(width), Dependencies.tail(Finite.Table(width, Game.Outcome), lower)), promotions, Solver.Initial{}, key)
+      layer_lookup(width, advance, Dependencies.get(0n, Cache.Entry, Cache.Entry{width, Tables.draws(width)}, lower), Dependencies.get(0n, Cache.Entry, Cache.Entry{width, Tables.draws(width)}, Dependencies.tail(Cache.Entry, lower)), promotions, Solver.Initial{}, key)
     case 1n+rest:
-      layer_lookup(width, advance, Dependencies.get(0n, Finite.Table(width, Game.Outcome), Tables.draws(width), lower), Dependencies.get(0n, Finite.Table(width, Game.Outcome), Tables.draws(width), Dependencies.tail(Finite.Table(width, Game.Outcome), lower)), promotions,
+      layer_lookup(width, advance, Dependencies.get(0n, Cache.Entry, Cache.Entry{width, Tables.draws(width)}, lower), Dependencies.get(0n, Cache.Entry, Cache.Entry{width, Tables.draws(width)}, Dependencies.tail(Cache.Entry, lower)), promotions,
         Solver.Next{Tables.clock(rest, advance, width, lower, promotions)}, key)
