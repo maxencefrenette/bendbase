@@ -23,8 +23,8 @@ def same(+left: List<&2, Stages.Stage>, +right: List<&2, Stages.Stage>,
   exact: {Some{left} == Some{right} : Maybe<&2, List<&2, Stages.Stage>>}) -> {left == right : List<&2, Stages.Stage>}:
   Equal.cong(Maybe<&2, List<&2, Stages.Stage>>, List<&2, Stages.Stage>, value => unpack(value), Some{left}, Some{right}, exact)
 
-def completed(~expected: P.Position -> Game.Outcome, ~sound: I.StageRule(~expected),
-  +count: Nat, +capacity: Nat, +limit: Nat, +previous: List<&2, Stages.Stage>, +entries: Maybe<&2, List<&2, Registry.Named>>, +result: List<&2, Stages.Stage>,
+def completed(~expected: P.Position -> Game.Outcome, ~limit: Nat, ~sound: I.StageRule(~expected, limit),
+  +count: Nat, +capacity: Nat, +previous: List<&2, Stages.Stage>, +entries: Maybe<&2, List<&2, Registry.Named>>, +result: List<&2, Stages.Stage>,
   old: I.Correct(~expected, count, capacity, previous),
   built: {Compile.directory(Directory.names(capacity), 1n+count, limit, previous) == entries : Maybe<&2, List<&2, Registry.Named>>},
   exact: {Compile.completed(1n+count, entries, previous) == Some{result} : Maybe<&2, List<&2, Stages.Stage>>}) ->
@@ -35,10 +35,10 @@ def completed(~expected: P.Position -> Game.Outcome, ~sound: I.StageRule(~expect
     case Some{entries}:
       %same(Stages.Stage{1n+count, entries} <> previous, result, exact) : I.Correct(~expected, 1n+count, capacity, _)
       Proof.step(~expected, count, capacity, entries, previous, old,
-        prior => sound(count)(capacity)(limit)(previous)(entries)(prior)(built))
+        prior => sound(count)(capacity)(previous)(entries)(prior)(built))
 
-def next(~expected: P.Position -> Game.Outcome, ~sound: I.StageRule(~expected),
-  +count: Nat, +capacity: Nat, +limit: Nat, +previous: Maybe<&2, List<&2, Stages.Stage>>, +result: List<&2, Stages.Stage>,
+def next(~expected: P.Position -> Game.Outcome, ~limit: Nat, ~sound: I.StageRule(~expected, limit),
+  +count: Nat, +capacity: Nat, +previous: Maybe<&2, List<&2, Stages.Stage>>, +result: List<&2, Stages.Stage>,
   exact: {Compile.next(1n+count, capacity, limit, previous) == Some{result} : Maybe<&2, List<&2, Stages.Stage>>},
   recurse: @+stages: List<&2, Stages.Stage> -> {previous == Some{stages} : Maybe<&2, List<&2, Stages.Stage>>} -> I.Correct(~expected, count, capacity, stages)) ->
   I.Correct(~expected, 1n+count, capacity, result):
@@ -46,14 +46,14 @@ def next(~expected: P.Position -> Game.Outcome, ~sound: I.StageRule(~expected),
     case None{}:
       TableProof.absurd(I.Correct(~expected, 1n+count, capacity, result), CompileProof.impossible(List<&2, Stages.Stage>, result, exact))
     case Some{previous}:
-      completed(~expected, ~sound, count, capacity, limit, previous, Compile.directory(Directory.names(capacity), 1n+count, limit, previous), result,
+      completed(~expected, ~limit, ~sound, count, capacity, previous, Compile.directory(Directory.names(capacity), 1n+count, limit, previous), result,
         recurse(previous)({==}), {==}, exact)
 
 # Induction over the REAL fallible generator. No table values are supplied by
 # a second evaluator. The StageRule premise is explicit: this theorem does not
 # itself discharge component WDL correctness or prove generation succeeds.
-def generated(~expected: P.Position -> Game.Outcome, ~sound: I.StageRule(~expected),
-  +count: Nat, +capacity: Nat, +limit: Nat, +result: List<&2, Stages.Stage>,
+def generated(~expected: P.Position -> Game.Outcome, ~limit: Nat, ~sound: I.StageRule(~expected, limit),
+  +count: Nat, +capacity: Nat, +result: List<&2, Stages.Stage>,
   exact: {Compile.generate(count, capacity, limit) == Some{result} : Maybe<&2, List<&2, Stages.Stage>>}) ->
   I.Correct(~expected, count, capacity, result):
   match count:
@@ -61,5 +61,5 @@ def generated(~expected: P.Position -> Game.Outcome, ~sound: I.StageRule(~expect
       %same(Nil{}, result, exact) : I.Correct(~expected, 0n, capacity, _)
       Proof.empty(~expected, capacity)
     case 1n++prior:
-      next(~expected, ~sound, prior, capacity, limit, Compile.generate(prior, capacity, limit), result, exact,
-        +previous => built => generated(~expected, ~sound, prior, capacity, limit, previous, built))
+      next(~expected, ~limit, ~sound, prior, capacity, Compile.generate(prior, capacity, limit), result, exact,
+        +previous => built => generated(~expected, ~limit, ~sound, prior, capacity, previous, built))

@@ -45,6 +45,25 @@ import ./src/chess_solver_proof.bend as ChessSolverProof
 import ./src/chess_compile_total.bend as CompileTotal
 import ./src/chess_cache_invariant_proof.bend as CacheInvariantProof
 import ./src/chess_generated_invariant.bend as GeneratedInvariant
+import ./src/chess_game_total.bend as CommonGameTotal
+import ./src/chess_game_proof.bend as CommonGameProof
+import ./src/chess_tables.bend as CommonTables
+import ./src/chess_tables_proof.bend as CommonTablesProof
+
+def Laws.common_chess_game_never_truncates(limit, remaining, actions, board):
+  CommonGameTotal.complete(limit, remaining, actions, board)
+
+def Laws.common_generated_wdl_is_fully_correct(name, key):
+  (CommonGameTotal.complete(100n, 100n, 14n, CommonTables.position(name, key)), CommonTablesProof.correct(name, key))
+
+def Laws.common_generated_directory_reads_correct_values(capacity, limit, name, key, bounded):
+  CommonTablesProof.lookup(capacity, limit, name, key, bounded)
+
+def Laws.common_generated_file_has_exact_length(name, limit):
+  CommonTablesProof.length(name, limit)
+
+def Laws.common_legal_lines_have_finite_bound(moves, limit, remaining, board, legal):
+  CommonGameProof.line_bound(moves, limit, remaining, board, legal)
 
 def Laws.common_correct_cache_extends(expected, count, capacity, entries, previous, old, current):
   CacheInvariantProof.extend(~expected, count, capacity, entries, previous, old, current)
@@ -52,8 +71,8 @@ def Laws.common_correct_cache_extends(expected, count, capacity, entries, previo
 def Laws.common_invariant_supplies_correct_resets(expected, width, count, capacity, stages, anchor, board, move, correct, legal, resets, bounded, material):
   CacheInvariantProof.reset_edge(~expected, width, count, capacity, stages, anchor, board, move, correct, legal, resets, bounded, material)
 
-def Laws.common_generated_cache_invariant(expected, sound, count, capacity, limit, result, success):
-  GeneratedInvariant.generated(~expected, ~sound, count, capacity, limit, result, success)
+def Laws.common_generated_cache_invariant(expected, limit, sound, count, capacity, result, success):
+  GeneratedInvariant.generated(~expected, ~limit, ~sound, count, capacity, result, success)
 
 def Laws.common_scheduled_chess_nodes_compile(C, solve, actions, count, capacity, context, anchor, board, bounded, material):
   CompileTotal.node(~C, ~solve, actions, count, capacity, context, anchor, board, bounded, material)

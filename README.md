@@ -3,6 +3,8 @@
 A Bend 2 WDL tablebase project with generators for three-man tables (KQK, KRK,
 KBK, KNK, KPK) and pawnless four-man tables. Correctness proofs also cover
 four-man tables with pawns, which do not yet have optimized generators.
+There is also an unconditional, correctness-first common N-men generator;
+it directly explores legal play and is not intended for practical generation.
 Each table includes both color reversals and either side to move.
 Queries start at halfmove clock zero. Castling rights are excluded.
 
@@ -16,8 +18,38 @@ mise exec -- bend PROOF.bend
 ```
 
 The proof is structural and does not enumerate chess positions. The current
-checker run takes about 1.2 seconds on this container. The comments in
+checker run takes about 1.6 seconds on this container. The comments in
 [LAWS.bend](LAWS.bend) document the theorem's scope and execution boundary.
+
+## Complete common-generator proof
+
+`src/chess_tables.bend` is the correctness-first generator for arbitrary ordered
+material signatures, including any number of pawns. It is not an adapter around
+the three-/four-man generators. `generate(capacity, 100n)` builds the directory
+for up to `capacity` non-king pieces; `file(name, 100n)` produces one byte list;
+`src/chess_table_file.bend` provides `write(path, name)` for a separate file.
+These APIs are opt-in and are not invoked by the existing generation mains.
+
+`common_generated_wdl_is_fully_correct` connects every byte directly to both
+players' forcing strategies, with no cache-correctness or successful-generation
+premise. The independent chess game includes all legal moves, promotions, EP,
+terminal outcomes, and the automatic 100-halfmove draw convention. Castling is
+never available. The root halfmove clock is zero.
+
+The termination measure combines piece count, summed pawn distance to promotion,
+and remaining clock. Its decrease bounds every legal line. A separate structural
+`NoCutoff` proof establishes that **no branch of the actual game unfolding uses
+the artificial fuel cutoff**. Thus finiteness does not introduce spurious draws.
+Table filling, complete directory lookup, serialization, and file length are
+proved with symbolic keys, without enumerating positions in the proof.
+
+This deliberately sacrifices speed: the actual generator directly tabulates
+`Game.evaluate` of the chess game, rather than relying on unproved cached
+continuation values. No runtime or memory efficiency is claimed. Files use one
+byte per full internal key, including EP states: 1 white win, 0 draw, 255 black
+win. File IO and compiled execution remain trusted, as with existing generators.
+The cached clock-layer alternative below still has an incomplete equivalence
+proof; its conditional theorems are not used to establish this result.
 
 ## Pawnless four-man proof
 
@@ -198,15 +230,15 @@ the expected chess meaning at each new stage. This is a parametric theorem, not
 an unconditional WDL proof; the component semantic premise and successful
 generation still need to be established.
 
-Remaining: prove that this fallible pipeline always compiles the required
+Remaining for the cached alternative: prove that this fallible pipeline always compiles the required
 components and that its earlier-stage cached values are correct chess outcomes,
 then migrate the file generators to the common graph and index. The new pipeline
 does not yet replace those generators. Its compiler and component theorems are
 NOT a completed N-men chess WDL proof: reset summaries still need the global
 semantic cache induction. No four-man tables were generated for this work.
 Existing file formats remain unchanged. No speed or compactness claim is made
-for the new internal index; stored roots will exclude EP rights even though
-continuation states retain them.
+for the new internal index. Legacy stored roots exclude EP rights; the direct
+common generator includes EP states in its internal-key files.
 
 ## Generate pawnless four-man tables
 

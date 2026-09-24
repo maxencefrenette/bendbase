@@ -35,6 +35,57 @@ import ./src/chess_solver.bend as ChessSolver
 import ./src/chess_solver_proof.bend as ChessSolverProof
 import ./src/chess_compile_total.bend as CompileTotal
 import ./src/chess_cache_invariant.bend as CacheInvariant
+import ./src/chess_game.bend as CommonGame
+import ./src/chess_tables.bend as CommonTables
+
+# Unconditional correctness-first N-men generator. It tabulates the common
+# chess game directly; no assumed StageRule, successful compilation, or cache
+# values appear in these laws. Material and position keys remain symbolic.
+# The game has no castling, includes EP and every promotion, uses the automatic
+# 100-halfmove draw convention, and gives existing terminals precedence.
+# NoCutoff proves that the natural-number recursion bound never invents a draw.
+# This is NOT the cached clock-layer implementation's missing equivalence proof.
+# The direct generator sacrifices speed completely; no generation benchmark or
+# practical feasibility claim is made. Existing optimized file mains are not
+# migrated. The common file writer stores the full internal index, including
+# EP states, in one byte per key (1/0/255), separately for each signature.
+law common_chess_game_never_truncates:
+  for +limit: Nat
+  for +remaining: Nat
+  for +actions: Nat
+  for +board: Position.Position
+  CommonGame.NoCutoff(Measure.budget(limit, Measure.position(board), remaining),
+    [CommonGame.State{remaining, board}], limit, actions)
+
+law common_generated_wdl_is_fully_correct:
+  for +name: List<&2, Position.Descriptor>
+  for +key: Word(MaterialDirectory.width(name))
+  CommonGame.NoCutoff(Measure.budget(100n, Measure.position(CommonTables.position(name, key)), 100n),
+    [CommonGame.State{100n, CommonTables.position(name, key)}], 100n, 14n) &
+  Game.CorrectByte(CommonGame.tree(100n, 100n, CommonTables.position(name, key)),
+    Finite.read(CommonTables.file(name, 100n), Finite.offset(MaterialDirectory.width(name), key)))
+
+law common_generated_directory_reads_correct_values:
+  for +capacity: Nat
+  for +limit: Nat
+  for +name: List<&2, Position.Descriptor>
+  for +key: Word(MaterialDirectory.width(name))
+  for bounded: Measure.Le(List.length(&2, Position.Descriptor, name), capacity)
+  {MaterialCache.lookup(CommonTables.generate(capacity, limit), name, MaterialDirectory.width(name), key) ==
+    Some{Game.evaluate(CommonGame.tree(limit, limit, CommonTables.position(name, key)))} : Maybe<&2, Game.Outcome>}
+
+law common_generated_file_has_exact_length:
+  for +name: List<&2, Position.Descriptor>
+  for +limit: Nat
+  {List.length(&2, U32, CommonTables.file(name, limit)) == Finite.size(MaterialDirectory.width(name)) : Nat}
+
+law common_legal_lines_have_finite_bound:
+  for +moves: List<&2, CommonChess.Action>
+  for +limit: Nat
+  for +remaining: Nat
+  for +board: Position.Position
+  for legal: CommonGame.Line(moves, limit, remaining, board)
+  Measure.Le(List.length(&2, CommonChess.Action, moves), Measure.budget(limit, Measure.position(board), remaining))
 
 # Semantic stage induction is now factored explicitly. These parametric laws
 # do NOT assert that an arbitrary expected function is chess WDL. StageRule
@@ -70,10 +121,10 @@ law common_invariant_supplies_correct_resets:
 
 law common_generated_cache_invariant:
   for ~expected: Position.Position -> Game.Outcome
-  for ~sound: CacheInvariant.StageRule(~expected)
+  for ~limit: Nat
+  for ~sound: CacheInvariant.StageRule(~expected, limit)
   for +count: Nat
   for +capacity: Nat
-  for +limit: Nat
   for +result: List<&2, Components.Stage>
   for success: {ChessSolver.generate(count, capacity, limit) == Some{result} : Maybe<&2, List<&2, Components.Stage>>}
   CacheInvariant.Correct(~expected, count, capacity, result)

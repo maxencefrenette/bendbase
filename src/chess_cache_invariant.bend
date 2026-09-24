@@ -32,8 +32,10 @@ def Stratum(~expected: P.Position -> Game.Outcome,
 
 # The remaining local semantic obligation. It concerns the actual component
 # directory builder, not an arbitrary cache extension or a reference solver.
-def StageRule(~expected: P.Position -> Game.Outcome) -> Type:
-  @+count: Nat -> @+capacity: Nat -> @+limit: Nat ->
+# Fix the clock limit before choosing expected: WDL need not agree between
+# different limits. This obligation belongs to the cached alternative only.
+def StageRule(~expected: P.Position -> Game.Outcome, +limit: Nat) -> Type:
+  @+count: Nat -> @+capacity: Nat ->
   @+previous: List<&2, Stages.Stage> -> @+entries: List<&2, Registry.Named> ->
   Correct(~expected, count, capacity, previous) ->
   {Compile.directory(Directory.names(capacity), 1n+count, limit, previous) == Some{entries} : Maybe<&2, List<&2, Registry.Named>>} ->
