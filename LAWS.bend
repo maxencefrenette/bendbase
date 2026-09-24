@@ -25,6 +25,43 @@ import ./src/position_address.bend as PositionAddress
 import ./src/chess_graph.bend as ChessGraph
 import ./src/dependency_engine.bend as Dependencies
 import ./src/table_cache.bend as TableCache
+import ./src/material_cache.bend as MaterialCache
+
+# Material lookup compares the entire ordered signature, including relative
+# owners and pawn kinds, and retains missing dependencies as None. This reader
+# is used for executable capture/promotion dependencies and also accepts common
+# N-men addresses. It does not choose a pawn stratum: the scheduler must supply
+# the appropriate completed directory. Nor does it prove its stored WDL values;
+# existing generator laws below discharge that obligation for their tables.
+law material_signature_matching_is_exact:
+  for +left: List<&2, Position.Descriptor>
+  for +right: List<&2, Position.Descriptor>
+  for matches: Game.Truth(MaterialCache.equal(left, right))
+  {left == right : List<&2, Position.Descriptor>}
+
+law material_cache_hit_has_matching_signature:
+  for +entries: List<&2, MaterialCache.Named>
+  for +query: List<&2, Position.Descriptor>
+  for +entry: TableCache.Entry
+  for found: {MaterialCache.find(entries, query) == Some{entry} : Maybe<&2, TableCache.Entry>}
+  MaterialCache.Hit(entries, query, entry)
+
+law material_cache_resolves_common_address:
+  for +n: Nat
+  for +material: Position.Material(n)
+  for +key: Word(PositionIndex.width(n))
+  for +table: Finite.Table(PositionIndex.width(n), Game.Outcome)
+  for +tail: List<&2, MaterialCache.Named>
+  {MaterialCache.resolve(
+     MaterialCache.Named{MaterialCache.signature(n, material), TableCache.Entry{PositionIndex.width(n), table}} <> tail,
+     PositionAddress.Address{n, material, key}) ==
+   Some{Finite.get(PositionIndex.width(n), Game.Outcome, key, table)} : Maybe<&2, Game.Outcome>}
+
+law material_cache_miss_is_explicit:
+  for +query: List<&2, Position.Descriptor>
+  for +width: Nat
+  for +key: Word(width)
+  {MaterialCache.lookup(Nil{}, query, width, key) == None{} : Maybe<&2, Game.Outcome>}
 
 # Completed dependencies carry their own index width. Captures, promotions
 # and pawn advances all use this lookup in the executable generators. A key
@@ -50,7 +87,7 @@ law successful_dependency_lookup_has_matching_width:
 # These cache laws and the generic family/history proofs cover arbitrary
 # payloads, including packed tables with different widths. Existing adapters
 # still choose their chess strata and justify their explicit draw fallbacks;
-# this does NOT yet prove a universal chess dependency order or address resolver.
+# this does NOT yet prove a universal chess dependency order.
 law dependency_cache_returns_completed_value:
   for -A: Data
   for +value: A

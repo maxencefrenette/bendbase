@@ -63,7 +63,7 @@ by structural induction, and the adapters reuse those results in their WDL proof
 
 `src/dependency_engine.bend` owns parallel dependency-family construction,
 ordered component scheduling, and completed-cache lookup. Both promotion and
-capture dependencies use ordinary indexed families: the separate four-field
+capture dependencies are built from ordinary descriptor families: the separate four-field
 `Promotions`/`Bundle` containers and selectors have been removed. KPK now uses
 the common scheduler and list cache instead of its own rank datatype, recursive
 schedule, and cache traversal. These operations are generic over payload types,
@@ -77,6 +77,14 @@ Its structural proofs show both that matching keys return the stored value and
 that successful reads cannot have mismatched widths. Keys are never padded or
 truncated by this cache. Existing WDL proofs show the adapters select the right
 entries and do not take the width-mismatch fallback during valid generation.
+
+`src/material_cache.bend` selects those entries by their full ordered material
+signature, including every piece kind and relative owner. Executable capture and
+promotion lookups use this directory instead of fixed Q/R/B/N cache-slot indices.
+The same reader accepts general `position_address.Address` values. Structural
+proofs establish exact signature matching, that every hit names an actual matching
+entry, and lossless reads of registered common-address tables. Missing signatures
+remain `None`; no table or material class is assumed to exist.
 
 Adapters retain their move rules, indexing, and choice of dependency strata.
 Captures read completed lower-material tables. KPK solves ranks nearest promotion first,
@@ -95,8 +103,10 @@ not assign WDL outcomes to missing dependencies.
 This consolidates clock solving and scheduling machinery, not the whole chess pipeline.
 Graph builders still own legacy move rules, indexing and chess-specific routing.
 The common scheduler executes a supplied order; it does not discover or prove
-an N-men dependency order. Connecting general successor addresses to completed
-tables still remains.
+an N-men dependency order. Material-address reads are implemented, but choosing
+the correct completed pawn-progress stratum and compiling the common graph into
+the clock solver still remain. A material signature alone does not identify a
+rank-specific component; the scheduler must supply the appropriate directory.
 Pawnful four-man byte lists still use the game evaluator.
 
 ### Toward an N-men solver
@@ -126,8 +136,9 @@ terminal result of the common chess rules; separate laws preserve the clock poli
 Reset edges remain addresses until their dependencies are resolved, so a missing
 dependency cannot be mistaken for a draw at this stage.
 
-The remaining work is to resolve/cache these addresses under a proved dependency
-order, prove conversion of legacy move rules, and migrate the file generators.
+The remaining work is to schedule these address reads under a proved dependency
+order, prove conversion of legacy move rules, and migrate the file generators
+to the common graph and index (their material-cache reads are already shared).
 The common graph builder is not yet used by those generators. Its move/graph
 proofs and the component solver theorem are NOT a completed N-men chess WDL proof.
 Existing file formats remain unchanged. No speed or compactness claim is made

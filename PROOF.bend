@@ -32,6 +32,19 @@ import ./src/position_address_proof.bend as PositionAddressProof
 import ./src/chess_graph_proof.bend as ChessGraphProof
 import ./src/dependency_engine_proof.bend as DependencyProof
 import ./src/table_cache_proof.bend as TableCacheProof
+import ./src/material_cache_proof.bend as MaterialCacheProof
+
+def Laws.material_signature_matching_is_exact(left, right, matches):
+  MaterialCacheProof.reflect(left, right, matches)
+
+def Laws.material_cache_hit_has_matching_signature(entries, query, entry, found):
+  MaterialCacheProof.find_sound(entries, query, entry, found)
+
+def Laws.material_cache_resolves_common_address(n, material, key, table, tail):
+  MaterialCacheProof.resolve_head(n, material, key, table, tail)
+
+def Laws.material_cache_miss_is_explicit(query, width, key):
+  {==}
 
 def Laws.completed_dependency_lookup_is_exact(width, key, table):
   TableCacheProof.exact(width, key, table)

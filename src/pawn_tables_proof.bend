@@ -1,7 +1,7 @@
 import Base
+import ./material_cache.bend as Registry
 import ./table_cache_proof.bend as CacheProof
 import ./table_cache.bend as Cache
-import ./dependency_engine_proof.bend as DependencyProof
 import ./material_catalog.bend as Catalog
 import ./dependency_engine.bend as Dependencies
 import ./game.bend as Game
@@ -32,7 +32,7 @@ def position_board(+advance: Nat, +position: Pawn.Position) ->
       position_square(owner, turn, wk, bk, Pawn.rank(advance, owner), file)
 
 def lookup_clock(+remaining: Nat, +advance: Nat, +position: Pawn.Position, +width: Nat, +size: {width == 20n : Nat},
-  +lower: List<&2, Cache.Entry>, +promotions: Finite.Table(2n, Cache.Entry)) ->
+  +lower: List<&2, Cache.Entry>, +promotions: List<&2, Registry.Named>) ->
   {Tables.lookup(width, advance, position, Tables.clock(remaining, advance, width, lower, promotions)) ==
    Tables.at(width, Tables.phase(remaining, advance, width, lower, promotions), position) : Game.Outcome}:
   %position_board(advance, position) :
@@ -53,7 +53,7 @@ def draws_get(depth: Nat, +key: Word(depth)) ->
     case 1n+rest WCon{True{}, tail}:
       draws_get(rest, tail)
 
-def top_history(+advance: Nat, +width: Nat, +limit: Nat, +promotions: Finite.Table(2n, Cache.Entry)) ->
+def top_history(+advance: Nat, +width: Nat, +limit: Nat, +promotions: List<&2, Registry.Named>) ->
   {Dependencies.get(0n, Cache.Entry, Cache.Entry{width, Tables.draws(width)}, Tables.history(advance, width, limit, promotions)) ==
    Cache.Entry{width, Tables.solve(advance, limit, width, limit, promotions)} : Cache.Entry}:
   match advance:
@@ -62,19 +62,23 @@ def top_history(+advance: Nat, +width: Nat, +limit: Nat, +promotions: Finite.Tab
     case 1n+prior:
       {==}
 
-def earlier_history(+advance: Nat, +width: Nat, +limit: Nat, +promotions: Finite.Table(2n, Cache.Entry)) ->
+def earlier_history(+advance: Nat, +width: Nat, +limit: Nat, +promotions: List<&2, Registry.Named>) ->
   {Dependencies.tail(Cache.Entry, Tables.history(1n+advance, width, limit, promotions)) ==
    Tables.history(advance, width, limit, promotions) : List<&2, Cache.Entry>}:
   {==}
 
 def promoted_generated(+limit: Nat, +width: Nat, +material: Chess.Material) ->
-  {Finite.get(2n, Cache.Entry, Catalog.key(material), Tables.promotions(limit, width)) ==
-   Cache.Entry{width, Pawnless.generate(limit, width, material)} : Cache.Entry}:
-  %Catalog.roundtrip(material) :
-    {Finite.get(2n, Cache.Entry, Catalog.key(material), Tables.promotions(limit, width)) ==
-     Cache.Entry{width, Pawnless.generate(limit, width, _)} : Cache.Entry}
-  DependencyProof.family_get(~Chess.Material, ~Tables.PromotionContext, ~Cache.Family, ~Tables.promotion_entry,
-    2n, width, limit, Catalog.pieces(), Catalog.key(material))
+  {Registry.find(Tables.promotions(limit, width), Catalog.signature(material)) ==
+   Some{Cache.Entry{width, Pawnless.generate(limit, width, material)}} : Maybe<&2, Cache.Entry>}:
+  match material:
+    case Chess.Queen{}:
+      {==}
+    case Chess.Rook{}:
+      {==}
+    case Chess.Bishop{}:
+      {==}
+    case Chess.Knight{}:
+      {==}
 
 def sources(+advance: Nat, clock: Nat, +width: Nat, +limit: Nat) -> Tables.Sources<width>:
   +promotions = Tables.promotions(limit, width)
@@ -198,10 +202,10 @@ def promotion_correct(+advance: Nat, +clock: Nat, +material: Chess.Material, +bo
   +width: Nat, +size: {width == 20n : Nat}, +limit: Nat) ->
   {Tables.edge_value(1n+advance, Pawn.Promoted{material, board}, width, sources(advance, clock, width, limit)) ==
    Game.evaluate(Chess.tree(limit, material, board)) : Game.Outcome}:
-  %Equal.sym(Cache.Entry,
-    Finite.get(2n, Cache.Entry, Catalog.key(material), Tables.promotions(limit, width)),
-    Cache.Entry{width, Pawnless.generate(limit, width, material)}, promoted_generated(limit, width, material)) :
-    {Cache.value(Cache.lookup(width, Index.encode_at(width, board), _), Game.Draw{}) ==
+  %Equal.sym(Maybe<&2, Cache.Entry>,
+    Registry.find(Tables.promotions(limit, width), Catalog.signature(material)),
+    Some{Cache.Entry{width, Pawnless.generate(limit, width, material)}}, promoted_generated(limit, width, material)) :
+    {Cache.value(Registry.read(width, Index.encode_at(width, board), _), Game.Draw{}) ==
      Game.evaluate(Chess.tree(limit, material, board)) : Game.Outcome}
   Equal.trans(Game.Outcome,
     Cache.value(Cache.lookup(width, Index.encode_at(width, board), Cache.Entry{width, Pawnless.generate(limit, width, material)}), Game.Draw{}),
@@ -430,7 +434,7 @@ def forest_correct(+advance: Nat, +remaining: Nat, +stage: Nat, +items: List<&2,
         {==}, forest_correct(1n, 1n+clock, 0n, tail, width, size, limit))
 
 def clock_position(+advance: Nat, +remaining: Nat, +board: Chess.Board, +width: Nat, +size: {width == 20n : Nat},
-  +lower: List<&2, Cache.Entry>, +promotions: Finite.Table(2n, Cache.Entry)) ->
+  +lower: List<&2, Cache.Entry>, +promotions: List<&2, Registry.Named>) ->
   {Finite.get(width, Game.Outcome, Index.encode_at(width, board), Tables.clock(remaining, advance, width, lower, promotions)) ==
    Tables.lookup(width, advance, Pawn.position(board), Tables.clock(remaining, advance, width, lower, promotions)) : Game.Outcome}:
   +position = Pawn.position(board)

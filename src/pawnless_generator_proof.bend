@@ -1,7 +1,7 @@
 import Base
+import ./material_cache.bend as Registry
 import ./table_cache_proof.bend as CacheProof
 import ./table_cache.bend as Cache
-import ./dependency_engine_proof.bend as DependencyProof
 import ./material_catalog.bend as Catalog
 import ./game.bend as Game
 import ./pawnless_chess.bend as Three
@@ -41,7 +41,7 @@ def combine_correct(+node: Rules.View, +values: List<&2, Game.Outcome>, +trees: 
       values, Lemmas.outcomes(trees), correct), assemble_evaluate(node, trees))
 
 def graph_get(depth: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope,
-  +moves: Nat, +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
+  +moves: Nat, +lower: Maybe<&2, List<&2, Registry.Named>>, +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
   {Finite.get(depth, Solver.Node<width>, key, Gen.graph_fill(depth, width, low, scope, moves, lower, keys)) ==
    Gen.node(width, low, scope, lower, Rules.view(moves, Gen.decode(width, scope, Finite.get(depth, Word(width), key, keys)))) : Solver.Node<width>}:
   match depth keys key:
@@ -53,7 +53,7 @@ def graph_get(depth: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope,
       graph_get(rest, width, low, scope, moves, lower, right, tail)
 
 def graph_lookup(+width: Nat, +low: Nat, +scope: Gen.Scope,
-  +moves: Nat, +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, +key: Word(width)) ->
+  +moves: Nat, +lower: Maybe<&2, List<&2, Registry.Named>>, +key: Word(width)) ->
   {Finite.get(width, Solver.Node<width>, key, Gen.graph(width, low, scope, moves, lower)) ==
    Gen.node(width, low, scope, lower, Rules.view(moves, Gen.decode(width, scope, key))) : Solver.Node<width>}:
   %FiniteProof.keys_get(width, key) :
@@ -62,7 +62,7 @@ def graph_lookup(+width: Nat, +low: Nat, +scope: Gen.Scope,
   graph_get(width, width, low, scope, moves, lower, Finite.keys(width), key)
 
 def edge_values(positions: List<&2, Chess.Position>, +width: Nat, +low: Nat, +scope: Gen.Scope,
-  +previous: Finite.Table(width, Game.Outcome), +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>) ->
+  +previous: Finite.Table(width, Game.Outcome), +lower: Maybe<&2, List<&2, Registry.Named>>) ->
   {Solver.values(width, Gen.edges(positions, width, low, scope, lower), previous) ==
    Gen.values(positions, width, low, scope, previous, lower) : List<&2, Game.Outcome>}:
   match positions:
@@ -75,7 +75,7 @@ def edge_values(positions: List<&2, Chess.Position>, +width: Nat, +low: Nat, +sc
         Gen.values(tail, width, low, scope, previous, lower),
         edge_values(tail, width, low, scope, previous, lower))
 
-def compiled_combine(+width: Nat, +low: Nat, +scope: Gen.Scope, +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>,
+def compiled_combine(+width: Nat, +low: Nat, +scope: Gen.Scope, +lower: Maybe<&2, List<&2, Registry.Named>>,
   +view: Rules.View, +values: List<&2, Game.Outcome>) ->
   {Solver.combine(width, Gen.node(width, low, scope, lower, view), values) == Gen.combine(view, values) : Game.Outcome}:
   match view values:
@@ -86,7 +86,7 @@ def compiled_combine(+width: Nat, +low: Nat, +scope: Gen.Scope, +lower: Maybe<&2
     case Rules.Play{turn, children} head <> tail:
       {==}
 
-def compiled_boundary(+width: Nat, +low: Nat, +scope: Gen.Scope, +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, +view: Rules.View) ->
+def compiled_boundary(+width: Nat, +low: Nat, +scope: Gen.Scope, +lower: Maybe<&2, List<&2, Registry.Named>>, +view: Rules.View) ->
   {Solver.boundary(width, Gen.node(width, low, scope, lower, view)) == Game.evaluate(Rules.boundary(view)) : Game.Outcome}:
   match view:
     case Rules.Stop{result}:
@@ -95,7 +95,7 @@ def compiled_boundary(+width: Nat, +low: Nat, +scope: Gen.Scope, +lower: Maybe<&
       {==}
 
 def compiled_step(+width: Nat, +low: Nat, +scope: Gen.Scope, +previous: Finite.Table(width, Game.Outcome),
-  +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, +view: Rules.View) ->
+  +lower: Maybe<&2, List<&2, Registry.Named>>, +view: Rules.View) ->
   {Solver.at(width, Solver.Next{previous}, Gen.node(width, low, scope, lower, view)) ==
    Gen.combine(view, Gen.values(Rules.children(view), width, low, scope, previous, lower)) : Game.Outcome}:
   match view:
@@ -112,7 +112,7 @@ def compiled_step(+width: Nat, +low: Nat, +scope: Gen.Scope, +previous: Finite.T
         compiled_combine(width, low, scope, lower, view, Gen.values(children, width, low, scope, previous, lower)))
 
 def compiled_at(+width: Nat, +low: Nat, +scope: Gen.Scope, +phase: Solver.Layer<width>,
-  +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, +moves: Nat, +position: Chess.Position) ->
+  +lower: Maybe<&2, List<&2, Registry.Named>>, +moves: Nat, +position: Chess.Position) ->
   {Solver.at(width, phase, Gen.node(width, low, scope, lower, Rules.view(moves, position))) ==
    Gen.at(width, low, scope, phase, lower, moves, position) : Game.Outcome}:
   match phase:
@@ -122,7 +122,7 @@ def compiled_at(+width: Nat, +low: Nat, +scope: Gen.Scope, +phase: Solver.Layer<
       compiled_step(width, low, scope, previous, lower, Rules.view(moves, position))
 
 def layer_at(+width: Nat, +low: Nat, +scope: Gen.Scope, +phase: Solver.Layer<width>,
-  +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, +moves: Nat, +key: Word(width)) ->
+  +lower: Maybe<&2, List<&2, Registry.Named>>, +moves: Nat, +key: Word(width)) ->
   {Finite.get(width, Game.Outcome, key, Solver.layer(width, Gen.graph(width, low, scope, moves, lower), phase)) ==
    Gen.at(width, low, scope, phase, lower, moves, Gen.decode(width, scope, key)) : Game.Outcome}:
   +graph = Gen.graph(width, low, scope, moves, lower)
@@ -140,7 +140,7 @@ def layer_at(+width: Nat, +low: Nat, +scope: Gen.Scope, +phase: Solver.Layer<wid
     compiled_at(width, low, scope, phase, lower, moves, position))
 
 def generated_get(+remaining: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope,
-  +moves: Nat, +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, +key: Word(width)) ->
+  +moves: Nat, +lower: Maybe<&2, List<&2, Registry.Named>>, +key: Word(width)) ->
   {Finite.get(width, Game.Outcome, key, Gen.generate(remaining, width, low, scope, moves, lower)) ==
    Gen.at(width, low, scope, Gen.phase(remaining, width, low, scope, moves, lower), lower, moves, Gen.decode(width, scope, key)) : Game.Outcome}:
   match remaining:
@@ -150,7 +150,7 @@ def generated_get(+remaining: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope,
       layer_at(width, low, scope, Solver.Next{Gen.generate(rest, width, low, scope, moves, lower)}, lower, moves, key)
 
 def generated_at(+remaining: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope,
-  +moves: Nat, +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, +key: Word(width), +position: Chess.Position,
+  +moves: Nat, +lower: Maybe<&2, List<&2, Registry.Named>>, +key: Word(width), +position: Chess.Position,
   decoded: {Gen.decode(width, scope, key) == position : Chess.Position}) ->
   {Finite.get(width, Game.Outcome, key, Gen.generate(remaining, width, low, scope, moves, lower)) ==
    Gen.at(width, low, scope, Gen.phase(remaining, width, low, scope, moves, lower), lower, moves, position) : Game.Outcome}:
@@ -292,23 +292,27 @@ def single_pointwise(+remaining: Nat, +width: Nat, +size: {width == 20n : Nat}, 
         single_forest(remaining, positions, width, size, moves, kind, Shape.Both{{==}, Unit{}}))
 
 def selected(+remaining: Nat, +width: Nat, +moves: Nat, +kind: Three.Material) ->
-  {Finite.get(2n, Cache.Entry, Catalog.key(kind), Gen.singles(remaining, width, moves)) ==
-   Cache.Entry{width, Gen.generate(remaining, width, width, Gen.Single{kind}, moves, None{})} : Cache.Entry}:
-  %Catalog.roundtrip(kind) :
-    {Finite.get(2n, Cache.Entry, Catalog.key(kind), Gen.singles(remaining, width, moves)) ==
-     Cache.Entry{width, Gen.generate(remaining, width, width, Gen.Single{_}, moves, None{})} : Cache.Entry}
-  DependencyProof.family_get(~Three.Material, ~Gen.Family, ~Cache.Family, ~Gen.single_entry,
-    2n, width, Gen.FamilyContext{remaining, moves}, Catalog.pieces(), Catalog.key(kind))
+  {Registry.find(Gen.singles(remaining, width, moves), Catalog.signature(kind)) ==
+   Some{Cache.Entry{width, Gen.generate(remaining, width, width, Gen.Single{kind}, moves, None{})}} : Maybe<&2, Cache.Entry>}:
+  match kind:
+    case Three.Queen{}:
+      {==}
+    case Three.Rook{}:
+      {==}
+    case Three.Bishop{}:
+      {==}
+    case Three.Knight{}:
+      {==}
 
 def lower_correct(+limit: Nat, +width: Nat, +size: {width == 20n : Nat}, +moves: Nat,
   +kind: Three.Material, +board: Three.Board) ->
   {Gen.lower_value(width, Some{Gen.singles(limit, width, moves)}, kind, board) ==
    Game.evaluate(Three.only(Rules.single(limit, Chess.from_three(kind, board) <> Nil{}, moves))) : Game.Outcome}:
-  %Equal.sym(Cache.Entry,
-    Finite.get(2n, Cache.Entry, Catalog.key(kind), Gen.singles(limit, width, moves)),
-    Cache.Entry{width, Gen.generate(limit, width, width, Gen.Single{kind}, moves, None{})},
+  %Equal.sym(Maybe<&2, Cache.Entry>,
+    Registry.find(Gen.singles(limit, width, moves), Catalog.signature(kind)),
+    Some{Cache.Entry{width, Gen.generate(limit, width, width, Gen.Single{kind}, moves, None{})}},
     selected(limit, width, moves, kind)) :
-    {Cache.value(Cache.lookup(width, Index.encode_at(width, board), _), Game.Draw{}) ==
+    {Cache.value(Registry.read(width, Index.encode_at(width, board), _), Game.Draw{}) ==
      Game.evaluate(Three.only(Rules.single(limit, Chess.from_three(kind, board) <> Nil{}, moves))) : Game.Outcome}
   Equal.trans(Game.Outcome,
     Cache.value(Cache.lookup(width, Index.encode_at(width, board), Cache.Entry{width, Gen.generate(limit, width, width, Gen.Single{kind}, moves, None{})}), Game.Draw{}),
@@ -336,7 +340,7 @@ def rebuild(+material: FourIndex.Material, +turn: Game.Player, +wk: Word(6n), +b
       {==}
 
 def double_at(+remaining: Nat, +width: Nat, +size: {width == 26n : Nat}, +low: Nat,
-  +material: FourIndex.Material, +moves: Nat, +lower: Maybe<&2, Finite.Table(2n, Cache.Entry)>, +board: FourIndex.Board,
+  +material: FourIndex.Material, +moves: Nat, +lower: Maybe<&2, List<&2, Registry.Named>>, +board: FourIndex.Board,
   +position: Chess.Position, rebuilt: {FourIndex.position(material, board) == position : Chess.Position}) ->
   {Finite.get(width, Game.Outcome, FourIndex.encode_at(width, board), Gen.generate(remaining, width, low, Gen.Double{material}, moves, lower)) ==
    Gen.at(width, low, Gen.Double{material}, Gen.phase(remaining, width, low, Gen.Double{material}, moves, lower), lower, moves, position) : Game.Outcome}:
