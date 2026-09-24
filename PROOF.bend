@@ -37,6 +37,19 @@ import ./src/component_cache_proof.bend as ComponentCacheProof
 import ./src/pawn_tables.bend as PawnTables
 import ./src/chess_measure_proof.bend as MeasureProof
 import ./src/chess_selection_proof.bend as SelectionProof
+import ./src/chess_component_proof.bend as ChessComponentProof
+
+def Laws.common_address_preserves_component(anchor, board):
+  ChessComponentProof.address_component(anchor, board)
+
+def Laws.common_legal_quiet_moves_preserve_material(anchor, board, move, legal, quiet):
+  ChessComponentProof.legal_material(anchor, board, move, legal, quiet)
+
+def Laws.common_quiet_routes_stay_in_component(anchor, board, move, legal, quiet):
+  ChessComponentProof.routed_component(anchor, board, move, legal, quiet)
+
+def Laws.common_quiet_routes_preserve_key_width(anchor, board, move, legal, quiet):
+  ChessComponentProof.routed_width(anchor, board, move, legal, quiet)
 
 def Laws.common_pawn_geometry_decreases_distance(owner, from, dest, board, allowed):
   MeasureProof.pawn_geometry(owner, from, dest, board, allowed)

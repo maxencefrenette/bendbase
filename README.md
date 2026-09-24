@@ -120,8 +120,12 @@ updater, with no extra pawn-progress premise. Combining the measure and the cloc
 as `(limit + 1) * measure + remaining` gives a bound decreasing on every legal
 continuation, including common graph address and clock routing. At limit 100,
 this includes capture/pawn-move clock resets, promotions, and en passant.
-Complete dependency-cache coverage, component compilation, and the global WDL
-composition are still pending.
+`src/chess_component_proof.bend` also proves that legal quiet moves preserve
+the ordered material signature, including relative ownership, and that their
+actual routed addresses stay in the same material/measure component with the
+same key width. This establishes quiet-component closure without enumerating
+positions. Reset dependency-cache coverage, component compilation, and the
+global WDL composition are still pending.
 A material signature alone does not identify a rank-specific component; the
 common measure is not yet wired into production stage selection.
 Pawnful four-man byte lists still use the game evaluator.

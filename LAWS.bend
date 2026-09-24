@@ -28,6 +28,42 @@ import ./src/table_cache.bend as TableCache
 import ./src/material_cache.bend as MaterialCache
 import ./src/component_cache.bend as Components
 import ./src/chess_measure.bend as Measure
+import ./src/chess_component.bend as ChessComponent
+
+# Quiet moves preserve the full ordered cache signature (owners AND kinds),
+# not just the number of pieces. Their actual routed addresses therefore stay
+# in the current material/measure component, with exactly the same key width.
+# This establishes quiet-component closure; it does not yet establish coverage
+# or correctness of the earlier components needed by reset lookups.
+law common_address_preserves_component:
+  for +anchor: Game.Player
+  for +board: Position.Position
+  {ChessComponent.of_address(PositionAddress.of_position(anchor, board)) == ChessComponent.of_position(anchor, board) : ChessComponent.Key}
+
+law common_legal_quiet_moves_preserve_material:
+  for +anchor: Game.Player
+  for +board: Position.Position
+  for +move: CommonChess.Action
+  for legal: Game.Truth(CommonChess.legal(board, move))
+  for quiet: Game.Truth(Bool.not(CommonChess.resets(board, move)))
+  {ChessComponent.material(anchor, CommonChess.after(board, move)) == ChessComponent.material(anchor, board) : List<&2, Position.Descriptor>}
+
+law common_quiet_routes_stay_in_component:
+  for +anchor: Game.Player
+  for +board: Position.Position
+  for +move: CommonChess.Action
+  for legal: Game.Truth(CommonChess.legal(board, move))
+  for quiet: Game.Truth(Bool.not(CommonChess.resets(board, move)))
+  {ChessComponent.of_address(ChessGraph.address(ChessGraph.route(anchor, board, move))) == ChessComponent.of_position(anchor, board) : ChessComponent.Key}
+
+law common_quiet_routes_preserve_key_width:
+  for +anchor: Game.Player
+  for +board: Position.Position
+  for +move: CommonChess.Action
+  for legal: Game.Truth(CommonChess.legal(board, move))
+  for quiet: Game.Truth(Bool.not(CommonChess.resets(board, move)))
+  {ChessComponent.address_width(ChessGraph.address(ChessGraph.route(anchor, board, move))) ==
+    ChessComponent.address_width(PositionAddress.of_position(anchor, board)) : Nat}
 
 # Common dependency measure: two kings + one per other man + the sum of
 # ranks remaining to promotion for every pawn. Double pushes consume two;
