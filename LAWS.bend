@@ -16,6 +16,60 @@ import ./src/two_pawn_chess.bend as TwoPawn
 import ./src/two_pawn_game.bend as TwoPawnGame
 import ./src/two_pawn_tables.bend as TwoPawnTables
 import ./src/pawnless_generator.bend as PawnlessGenerator
+import ./src/position.bend as Position
+import ./src/position_index.bend as PositionIndex
+import ./src/position_legacy.bend as PositionLegacy
+
+# N-men consolidation foundation. n counts non-king pieces. Material fixes
+# ordered piece kinds (including pawns) and relative owners; boards carry
+# squares, side to move and explicit EP continuation state. These laws cover
+# representation and lossless conversion, NOT yet N-men legal moves or WDL.
+# Existing generators/file formats and their chess correctness laws below
+# remain authoritative until migration to the common solver is complete.
+law general_position_index_roundtrip:
+  for +n: Nat
+  for +board: Position.Board(n)
+  {PositionIndex.decode(n, PositionIndex.encode(n, board)) == board : Position.Board(n)}
+
+law general_position_index_is_injective:
+  for +n: Nat
+  for +left: Position.Board(n)
+  for +right: Position.Board(n)
+  for same: {PositionIndex.encode(n, left) == PositionIndex.encode(n, right) : Word(PositionIndex.width(n))}
+  {left == right : Position.Board(n)}
+
+law general_material_has_exact_piece_count:
+  for +n: Nat
+  for +material: Position.Material(n)
+  for +board: Position.Board(n)
+  for +owner: Game.Player
+  {List.length(&2, Position.Man, Position.men(n, material, board, owner)) == n : Nat}
+
+law three_man_embedding_is_lossless:
+  for +board: Chess.Board
+  {PositionLegacy.to_three(PositionLegacy.from_three(board)) == board : Chess.Board}
+
+law four_man_embedding_is_lossless:
+  for +board: FourIndex.Board
+  {PositionLegacy.to_four(PositionLegacy.from_four(board)) == board : FourIndex.Board}
+
+law three_man_embedding_preserves_position:
+  for +kind: Chess.Material
+  for +board: Chess.Board
+  {Position.position(1n, PositionLegacy.three_material(Position.Piece{kind}), PositionLegacy.from_three(board)) ==
+   PositionLegacy.lift_pawnless(Material.from_three(kind, board)) : Position.Position}
+
+law four_man_embedding_preserves_position:
+  for +material: FourIndex.Material
+  for +board: FourIndex.Board
+  {Position.position(2n, PositionLegacy.four_material(material), PositionLegacy.from_four(board)) ==
+   PositionLegacy.lift_pawnless(FourIndex.position(material, board)) : Position.Position}
+
+law kpk_embedding_preserves_position:
+  for +advance: Nat
+  for +position: Pawn.Position
+  {Position.position(1n, PositionLegacy.three_material(Position.Pawn{}), PositionLegacy.from_kpk(advance, position)) ==
+   PositionLegacy.lift_kpk(advance, position) : Position.Position}
 
 # Domain: two kings and one queen, rook, bishop, or knight, of either color;
 # either side to move; no castling rights. Squares and moves are defined in

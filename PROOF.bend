@@ -23,6 +23,32 @@ import ./src/two_pawn_tables.bend as TwoPawnTables
 import ./src/two_pawn_moves_proof.bend as TwoPawnMovesProof
 import ./src/two_pawn_tables_proof.bend as TwoPawnProof
 import ./src/pawnless_generator_proof.bend as GeneratorProof
+import ./src/position_index_proof.bend as PositionIndexProof
+import ./src/position_legacy_proof.bend as PositionLegacyProof
+
+def Laws.general_position_index_roundtrip(n, board):
+  PositionIndexProof.roundtrip(n, board)
+
+def Laws.general_position_index_is_injective(n, left, right, same):
+  PositionIndexProof.injective(n, left, right, same)
+
+def Laws.general_material_has_exact_piece_count(n, material, board, owner):
+  PositionIndexProof.men_count(n, material, board, owner)
+
+def Laws.three_man_embedding_is_lossless(board):
+  PositionLegacyProof.three_roundtrip(board)
+
+def Laws.four_man_embedding_is_lossless(board):
+  PositionLegacyProof.four_roundtrip(board)
+
+def Laws.three_man_embedding_preserves_position(kind, board):
+  PositionLegacyProof.three_position(kind, board)
+
+def Laws.four_man_embedding_preserves_position(material, board):
+  PositionLegacyProof.four_position(material, board)
+
+def Laws.kpk_embedding_preserves_position(advance, position):
+  PositionLegacyProof.kpk_position(advance, position)
 
 def Laws.legal_moves_are_complete(material, board, key, legal):
   MovesProof.legal_present(material, board, key, legal)

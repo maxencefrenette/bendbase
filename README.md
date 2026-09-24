@@ -63,8 +63,29 @@ Adapters retain their move rules, indexing, and dependency scheduling. Captures
 read completed lower-material tables. KPK solves ranks nearest promotion first,
 so pawn pushes and promotions read completed tables at a fresh clock, while quiet
 moves read the previous clock layer. Its final rank selection also uses the
-shared indexed fill. The pawnful four-man generator is the next extension;
-its current byte lists still use the game evaluator.
+shared indexed fill. This is shared execution machinery, not yet a unified
+material-independent solver: adapters still own successor lookup and scheduling.
+Pawnful four-man byte lists still use the game evaluator.
+
+### Toward an N-men solver
+
+`src/position.bend` defines one material signature and board representation for
+any number of non-king pieces. Kinds include pawns and Q/R/B/N; ownership is
+relative to a per-position anchor color. Kings, turn and explicit en-passant
+state are common to every material. Ordered slots also support identical pieces.
+
+`src/position_index.bend` provides one recursive index, with six bits per extra
+piece and a 21-bit frame. Structural proofs establish lossless decoding and
+injectivity for arbitrary piece counts, without enumerating positions.
+`src/position_legacy.bend` supplies proved lossless three-/four-man board
+conversions and position-preserving embeddings for pawnless tables and KPK.
+
+These are the representation foundations, not an N-men chess-correctness claim.
+They do not yet replace the existing generators or file layouts. The next stage
+is common legal moves and clock-reset/dependency handling over this representation,
+followed by migrating the generators and their WDL proofs. No speed or compactness
+claim is made for this internal index; stored roots will exclude EP rights even
+though continuation states retain them.
 
 ## Generate pawnless four-man tables
 
