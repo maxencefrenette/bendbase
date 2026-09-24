@@ -35,6 +35,16 @@ import ./src/table_cache_proof.bend as TableCacheProof
 import ./src/material_cache_proof.bend as MaterialCacheProof
 import ./src/component_cache_proof.bend as ComponentCacheProof
 import ./src/pawn_tables.bend as PawnTables
+import ./src/chess_measure_proof.bend as MeasureProof
+
+def Laws.common_pawn_geometry_decreases_distance(owner, from, dest, board, allowed):
+  MeasureProof.pawn_geometry(owner, from, dest, board, allowed)
+
+def Laws.common_move_update_respects_measure(pieces, from, dest, choice, ep, victim, progress):
+  MeasureProof.update(pieces, from, dest, choice, ep, victim, progress)
+
+def Laws.common_resets_decrease_measure_given_pawn_progress(board, move, progress, reset):
+  MeasureProof.after_reset(board, move, progress, reset)
 
 def Laws.component_stage_matching_is_exact(left, right, matches):
   ComponentCacheProof.equal_reflect(left, right, matches)

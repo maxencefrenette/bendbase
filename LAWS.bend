@@ -27,13 +27,48 @@ import ./src/dependency_engine.bend as Dependencies
 import ./src/table_cache.bend as TableCache
 import ./src/material_cache.bend as MaterialCache
 import ./src/component_cache.bend as Components
+import ./src/chess_measure.bend as Measure
+
+# Common dependency measure: two kings + one per other man + the sum of
+# ranks remaining to promotion for every pawn. Double pushes consume two;
+# promotion removes the pawn-distance contribution but keeps the man.
+# The move-update proof is structural over arbitrary material, including EP.
+# IMPORTANT: the reset theorem still has an explicit local pawn-progress
+# premise. Pawn geometry establishes progress for a selected pawn; deriving
+# MoveProgress for the entire list from legal + distinct source occupancy is
+# the remaining bridge. These laws do NOT yet claim N-men WDL correctness.
+law common_pawn_geometry_decreases_distance:
+  for +owner: Game.Player
+  for +from: Word(6n)
+  for +dest: Word(6n)
+  for +board: Position.Position
+  for allowed: Game.Truth(CommonChess.pawn_geometry(owner, from, dest, board))
+  Measure.Lt(Measure.distance(owner, dest), Measure.distance(owner, from))
+
+law common_move_update_respects_measure:
+  for +pieces: List<&2, Position.Man>
+  for +from: Word(6n)
+  for +dest: Word(6n)
+  for +choice: Chess.Material
+  for +ep: Bool
+  for +victim: Word(6n)
+  for progress: Measure.Progress(pieces, from, dest)
+  Measure.Bound(Measure.changes(pieces, from, dest, ep, victim),
+    Measure.men(CommonChess.move_men(pieces, from, dest, choice, ep, victim)), Measure.men(pieces))
+
+law common_resets_decrease_measure_given_pawn_progress:
+  for +board: Position.Position
+  for +move: CommonChess.Action
+  for progress: Measure.MoveProgress(board, move)
+  for reset: Game.Truth(CommonChess.resets(board, move))
+  Measure.Lt(Measure.position(CommonChess.after(board, move)), Measure.position(board))
 
 # Component identity is (stage, material signature). The generic scheduler
 # stamps completed directories with their stage and exposes only earlier
 # stages to the next builder. KPK's actual generator uses it for pawn pushes
 # and final rank selection; no cache-list offsets encode pawn progress.
 # This is a scheduling invariant, NOT yet a proof that arbitrary N-men legal
-# reset moves decrease some common chess measure. That measure and migration
+# reset moves satisfy the pawn-progress premise above. That bridge and migration
 # of the common graph remain separate obligations. Existing WDL laws are intact.
 law component_stage_matching_is_exact:
   for +left: Nat

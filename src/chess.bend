@@ -6,6 +6,7 @@ import ./material_chess.bend as Material
 import ./geometry.bend as Geometry
 import ./pawnless_index.bend as Index
 import ./finite_table.bend as Finite
+import ./pawn_distance.bend as PawnDistance
 
 # Common no-castling move rules. Promotion choice is ignored on non-promoting
 # moves; the four redundant encodings do not change the set of successors.
@@ -75,12 +76,8 @@ def clear(men: List<&2, P.Man>, +from: Word(6n), +dest: Word(6n)) -> Bool:
     case P.Man{owner, kind, at} <> tail:
       Bool.not(Geometry.on_segment(Three.number(6n, from), Three.number(6n, dest), Three.number(6n, at))) && clear(tail, from, dest)
 
-def forward(owner: Game.Player, from: U32, dest: U32, steps: U32) -> Bool:
-  match owner:
-    case Game.White{}:
-      U32.is_eq(Geometry.rank(dest), (Geometry.rank(from) + steps : U32))
-    case Game.Black{}:
-      U32.is_eq(Geometry.rank(from), (Geometry.rank(dest) + steps : U32))
+def forward(owner: Game.Player, from: Word(6n), dest: Word(6n), steps: Nat) -> Bool:
+  PawnDistance.forward(owner, from, dest, steps)
 
 def king(position: P.Position, player: Game.Player) -> Word(6n):
   match position player:
@@ -92,7 +89,7 @@ def king(position: P.Position, player: Game.Player) -> Word(6n):
 def attacks(owner: Game.Player, kind: P.PieceKind, +from: Word(6n), +dest: Word(6n), position: P.Position) -> Bool:
   match kind position:
     case P.Pawn{} _:
-      forward(owner, Three.number(6n, from), Three.number(6n, dest), 1) &&
+      forward(owner, from, dest, 1n) &&
         U32.is_eq(Geometry.distance(Geometry.file(Three.number(6n, from)), Geometry.file(Three.number(6n, dest))), 1)
     case P.Piece{+kind} P.Position{turn, wk, bk, men, ep, target}:
       Geometry.piece_step(Three.kind(kind), Three.number(6n, from), Three.number(6n, dest), Three.number(6n, wk), Three.number(6n, bk)) &&
@@ -228,8 +225,8 @@ def pawn_geometry(+owner: Game.Player, +from: Word(6n), +dest: Word(6n), +positi
   match position:
     case P.Position{turn, wk, bk, +men, ep, target}:
       (Geometry.same_file(Three.number(6n, from), Three.number(6n, dest)) && empty(position, dest) &&
-        (forward(owner, Three.number(6n, from), Three.number(6n, dest), 1) ||
-         (starting(owner, from) && forward(owner, Three.number(6n, from), Three.number(6n, dest), 2) && empty(position, shift(owner, from))))) ||
+        (forward(owner, from, dest, 1n) ||
+         (starting(owner, from) && forward(owner, from, dest, 2n) && empty(position, shift(owner, from))))) ||
       (attacks(owner, P.Pawn{}, from, dest, position) &&
         ((occupied(men, dest) && Bool.not(friendly(men, owner, dest))) ||
          (ep && equal(target, dest) && empty(position, dest) && pawn_at(men, Three.other(owner), shift(Three.other(owner), dest)))))

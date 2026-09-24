@@ -112,10 +112,15 @@ This consolidates clock solving and scheduling machinery, not the whole chess pi
 Graph builders still own legacy move rules, indexing and chess-specific routing.
 The common scheduler executes a supplied order; it does not discover or prove
 an N-men dependency order. Stage-and-material reads are implemented and used by
-KPK, but deriving a decreasing stage measure from arbitrary common chess moves
-and compiling the common graph into the clock solver still remain. A material
-signature alone does not identify a rank-specific component; stage identifiers
-are explicit and cannot yet be derived generically from the common position.
+KPK. `src/chess_measure.bend` defines the common stage measure as total men
+plus the sum of pawn ranks remaining to promotion. The common pawn rules express
+forward displacement using this same coordinate. Structural proofs establish
+that pawn geometry decreases distance and that the actual list updater decreases
+the measure on resets, given forward progress for each moving pawn. Deriving
+that premise for the whole list from legal-move selection and distinct occupancy
+is still pending, as is compiling the common graph into the clock solver.
+A material signature alone does not identify a rank-specific component; the
+common measure is not yet wired into production stage selection.
 Pawnful four-man byte lists still use the game evaluator.
 
 ### Toward an N-men solver
