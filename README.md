@@ -1,255 +1,124 @@
 # Bendbase
 
-A Bend 2 WDL tablebase project with generators for three-man tables (KQK, KRK,
-KBK, KNK, KPK) and pawnless four-man tables. Correctness proofs also cover
-four-man tables with pawns, which do not yet have optimized generators.
-There is also an unconditional, correctness-first common N-men generator;
-it directly explores legal play and is not intended for practical generation.
-Each table includes both color reversals and either side to move.
-Queries start at halfmove clock zero. Castling rights are excluded.
+Chess WDL tablebases in Bend 2. Queries start at halfmove clock zero.
+Castling is unavailable throughout play. Captures and pawn moves reset the
+clock; other moves consume one halfmove. At 100 halfmoves, an existing terminal
+result—including checkmate—takes precedence; otherwise the position is drawn.
+Repetition history and optional draw claims are outside the model.
 
-The complete correctness theorem is in [LAWS.bend](LAWS.bend). It connects
-the bytes produced by the generator to perfect-play strategies under the
-specified chess rules, in both directions for both players. Run:
+## Implementations
+
+| Implementation | Scope | Correctness status |
+| --- | --- | --- |
+| Direct common generator: [chess_tables.bend](src/chess_tables.bend) | Arbitrary finite material, including pawns, promotions and en passant | Unconditional byte/strategy theorem; very expensive generation |
+| Specialized clock-layer generators: [main.bend](main.bend), [four_main.bend](four_main.bend) | Pawnless three-man, KPK, and pawnless four-man | End-to-end WDL proofs for their existing formats |
+| Specialized pawnful four-man definitions: [one_pawn_tables.bend](src/one_pawn_tables.bend), [two_pawn_tables.bend](src/two_pawn_tables.bend) | One pawn plus Q/R/B/N; KPPK and KPKP | Proved byte lists using game evaluation, not optimized clock-layer generation |
+| Experimental common cached solver: [chess_solver.bend](src/chess_solver.bend) | Arbitrary ordered material signatures | Local compilation/solver proofs; full chess equivalence and successful generation remain unproved |
+
+These implementations are not interchangeable: their indexes and file formats
+differ. All support both color reversals and either side to move within their
+respective material domains. No Syzygy-speed or Syzygy-format compatibility is
+claimed. The direct common generator's bounded three-man benchmark did not
+complete a table before reaching its memory guard.
+
+## Check the proofs
+
+With Bend installed, the repository manages Clang through mise:
 
 ```sh
 mise install
 mise exec -- bend PROOF.bend
 ```
 
-The proof is structural and does not enumerate chess positions. The current
-checker run takes about 1.6 seconds on this container. The comments in
-[LAWS.bend](LAWS.bend) document the theorem's scope and execution boundary.
+The proof is structural: it does not enumerate chess positions or generate
+tables. The project target is a proof check under three seconds.
 
-`LAWS.bend` keeps the public chess rules and end-to-end WDL guarantees.
-Supporting statements live in [chess laws](src/chess_laws.bend),
+[LAWS.bend](LAWS.bend) contains the public chess rules and end-to-end WDL
+guarantees. Supporting statements are grouped into [chess laws](src/chess_laws.bend),
 [cache laws](src/cache_laws.bend), and [legacy laws](src/legacy_laws.bend).
-`PROOF.bend` imports and proves all four modules; this organization does not
-exclude any supporting obligation from the single proof-check command.
+[PROOF.bend](PROOF.bend) imports and proves all four modules.
 
-## Complete common-generator proof
+`Game.Forces` describes a player's forcing strategies independently of table
+generation. `Game.CorrectByte` connects stored bytes to those strategies in
+both directions for both players. Theorems certify the pure byte lists passed
+to file writing, not pre-existing files. Bend's checker/compiler/runtime and
+operating-system file IO are trusted execution boundaries. Specialized
+correctness theorems retain their explicit valid-position and format premises.
 
-`src/chess_tables.bend` is the correctness-first generator for arbitrary ordered
-material signatures, including any number of pawns. It is not an adapter around
-the three-/four-man generators. `generate(capacity, 100n)` builds the directory
-for up to `capacity` non-king pieces; `file(name, 100n)` produces one byte list;
-`src/chess_table_file.bend` provides `write(path, name)` for a separate file.
-These APIs are opt-in and are not invoked by the existing generation mains.
+## Direct common generator
 
-`common_generated_wdl_is_fully_correct` connects every byte directly to both
-players' forcing strategies, with no cache-correctness or successful-generation
-premise. The independent chess game includes all legal moves, promotions, EP,
-terminal outcomes, and the automatic 100-halfmove draw convention. Castling is
-never available. The root halfmove clock is zero.
+[chess.bend](src/chess.bend) defines common move rules over two kings and an
+arbitrary piece list: occupancy, slider obstruction, king safety, pawn pushes,
+all four promotions, and en passant. Move enumeration is proved complete and
+sound against those rules. Castling is never available.
 
+[chess_game.bend](src/chess_game.bend) unfolds legal play into a finite game.
 The termination measure combines piece count, summed pawn distance to promotion,
-and remaining clock. Its decrease bounds every legal line. A separate structural
-`NoCutoff` proof establishes that **no branch of the actual game unfolding uses
-the artificial fuel cutoff**. Thus finiteness does not introduce spurious draws.
-Table filling, complete directory lookup, serialization, and file length are
-proved with symbolic keys, without enumerating positions in the proof.
+and remaining clock. Captures and pawn moves strictly decrease the reset
+measure; quiet moves consume clock. The `NoCutoff` proof establishes that no
+branch uses the artificial fuel cutoff, so the bound does not invent draws.
 
-This deliberately sacrifices speed: the actual generator directly tabulates
-`Game.evaluate` of the chess game, rather than relying on unproved cached
-continuation values. No runtime or memory efficiency is claimed. Files use one
-byte per full internal key, including EP states: 1 white win, 0 draw, 255 black
-win. File IO and compiled execution remain trusted, as with existing generators.
-The cached clock-layer alternative below still has an incomplete equivalence
-proof; its conditional theorems are not used to establish this result.
+The actual generator directly tabulates this game's value. The public
+`common_generated_wdl_is_fully_correct` law certifies its bytes without assumed
+cache correctness or successful-compilation premises. Directory coverage,
+exact-key lookup, serialization and file length also have structural proofs.
+These results do not establish equivalence of the experimental cached solver.
 
-## Pawnless four-man proof
+The opt-in APIs are:
 
-`src/material_chess.bend` provides material-independent pawnless positions and
-move rules: two kings plus a list of colored pieces, with full-board obstruction,
-captures, and king safety. `PROOF.bend` checks move-generation completeness and
-soundness, successor validity, and lossless conversion from three-man boards.
-The move domain is all 12-bit source/destination pairs; the proof keeps this
-domain symbolic rather than checking individual positions.
+- `chess_tables.generate(capacity, 100n)`: a directory of every ordered material
+  signature with up to `capacity` **non-king** pieces.
+- `chess_tables.file(name, 100n)`: the byte list for one material signature.
+- `chess_table_file.write(path, name)`: write that list to its own file.
 
-The proof now covers every pawnless four-man material configuration, both
-ownership relations, both colors, and both sides to move. It connects the
-clock-layer generator's serialized WDL bytes directly to perfect-play strategies
-under the chess game semantics. Captures enter the three-man game with a fresh 100-halfmove allowance;
-quiet moves consume one halfmove. Structural proofs establish that captures
-reduce material and quiet moves preserve it. The three-man continuation uses
-the same generalized rules, without assuming equivalence to the old solver.
+The existing generation mains do not call these APIs. Direct game evaluation
+repeats work across positions and move sequences, and the dense index consumes
+substantial memory. Formal support for arbitrary material is not a claim of
+practical scalability.
 
-`four_index.Material` specifies the two piece kinds and whether they have
-opposing owners. Its file has a 26-bit index and one signed byte
-per slot (64 MiB). The high six bits encode the second piece's square; the
-low twenty bits use the existing three-man layout for the first piece and
-kings. Thus `offset = second_square * 1048576 + three_man_offset`.
-Invalid placements are outside the WDL theorem's domain.
+### Benchmark entrypoint
 
-No four-man tables have been generated during development, and `main.bend`
-still generates only the five three-man files. There is no separate four-man
-reference solver: `four_chess.bend` defines the rules/game tree, and the generator
-is proved correct against that specification. Three-man and pawnless four-man
-generation share the engine described below; their chess specifications remain
-independent and their full correctness laws are unchanged.
+[benchmarks/bench_three_main.bend](benchmarks/bench_three_main.bend) invokes the
+direct common generator for one three-man material. Build it without running
+generation:
 
-## Shared generation engine
+```sh
+mkdir -p build
+mise exec -- bend benchmarks/bench_three_main.bend -o build/bench-three
+```
 
-`src/clock_solver.bend` now owns the actual reversible-clock solver used by
-pawnless three-man, KPK, and pawnless four-man generation. Each compiles a
-component graph with terminal nodes, quiet edges (same-table keys), and reset
-edges (completed dependency outcomes). The solver has no material-family cases.
-`src/table_engine.bend` supplies parallel indexed filling, WDL folding and byte
-conversion; it no longer contains a separate clock iteration implementation.
-`src/table_engine_proof.bend` proves indexed filling and byte conversion once,
-by structural induction, and the adapters reuse those results in their WDL proofs.
+Its arguments are `-- <q|r|b|n|p> <output.wdl>`. Use a fresh output path and
+external time **and memory** limits; interrupted output is not a usable table.
+This entrypoint is separate from the specialized three-man generator.
 
-`src/dependency_engine.bend` owns parallel dependency-family construction,
-ordered component scheduling, and completed-cache lookup. Both promotion and
-capture dependencies are built from ordinary descriptor families: the separate four-field
-`Promotions`/`Bundle` containers and selectors have been removed. KPK now uses
-the common scheduler and list cache instead of its own rank datatype, recursive
-schedule, and cache traversal. These operations are generic over payload types,
-not limited to a fixed piece count or table width. Structural proofs establish
-family lookup, exact schedule length, and preservation of every completed stage.
+## Specialized generators
 
-`src/table_cache.bend` stores completed tables with their own runtime index
-widths, so one family or history can contain different-sized components. Capture,
-promotion, pawn-push and final KPK rank lookups all use the same exact-width reader.
-Its structural proofs show both that matching keys return the stored value and
-that successful reads cannot have mismatched widths. Keys are never padded or
-truncated by this cache. Existing WDL proofs show the adapters select the right
-entries and do not take the width-mismatch fallback during valid generation.
+Both use [clock_solver.bend](src/clock_solver.bend): terminal initialization
+followed by 100 reversible-clock layers. Quiet moves read the preceding layer;
+captures and pawn moves read completed dependencies at a fresh clock. KPK solves
+pawn ranks nearest promotion first. The shared fill and byte-conversion code
+uses balanced parallel table halves.
 
-`src/material_cache.bend` selects those entries by their full ordered material
-signature, including every piece kind and relative owner. Executable capture and
-promotion lookups use this directory instead of fixed Q/R/B/N cache-slot indices.
-The same reader accepts general `position_address.Address` values. Structural
-proofs establish exact signature matching, that every hit names an actual matching
-entry, and lossless reads of registered common-address tables. Missing signatures
-remain `None`; no table or material class is assumed to exist.
+These generators retain domain-specific move rules, indexes and dependency
+routing, with proofs connecting their serialized results to their chess games.
+Representation bridges do not assume equivalence of independently defined
+legal-move predicates.
 
-`src/component_cache.bend` adds an explicit stage identifier to each completed
-material directory. KPK uses it for single pushes, double pushes and final rank
-reads; the old list-offset selection and `5 - rank` calculation are removed.
-The common scheduler assigns stage labels itself, and structural proofs establish
-that its completed cache contains only earlier stages. A newer stage cannot
-shadow a requested older component, and the current stage cannot be read from
-that earlier-stage cache. The staged reader also accepts common N-men addresses.
+### Three-man files
 
-Adapters retain their move rules, indexing, and choice of dependency strata.
-Captures read completed lower-material tables. KPK solves ranks nearest promotion first,
-so pawn pushes and promotions read completed tables at a fresh clock, while quiet
-moves read the previous clock layer. Its final rank selection also uses the
-shared indexed fill. Structural compilation proofs connect each graph to the
-existing chess semantics, preserving all end-to-end WDL laws. The component
-solver also has a general serialized-byte/strategy theorem independent of
-material. Graphs are currently held in memory: this avoids regenerating moves
-at every clock but increases memory use; no performance claim is made.
+```sh
+mkdir -p build
+mise exec -- bend main.bend -o build/bendbase
+./build/bendbase
+```
 
-Cache misses are explicit `None` values. Legacy adapters supply explicit draw
-fallbacks where their existing chess proofs justify them; the general cache does
-not assign WDL outcomes to missing dependencies.
+This writes `kqk.wdl`, `krk.wdl`, `kbk.wdl`, `knk.wdl`, and `kpk.wdl` in
+`build/`. Existing files are overwritten. The common-generator benchmark is
+not a benchmark of this specialized implementation.
 
-This consolidates clock solving and scheduling machinery, not the whole chess pipeline.
-Graph builders still own legacy move rules, indexing and chess-specific routing.
-The common scheduler executes a supplied order. Stage-and-material reads are implemented and used by
-KPK. `src/chess_measure.bend` defines the common stage measure as total men
-plus the sum of pawn ranks remaining to promotion. The common pawn rules express
-forward displacement using this same coordinate. Structural proofs establish
-that legal resets strictly decrease this measure and legal quiet moves preserve
-it. `src/chess_selection_proof.bend` connects move selection to the actual list
-updater, with no extra pawn-progress premise. Combining the measure and the clock
-as `(limit + 1) * measure + remaining` gives a bound decreasing on every legal
-continuation, including common graph address and clock routing. At limit 100,
-this includes capture/pawn-move clock resets, promotions, and en passant.
-`src/chess_component_proof.bend` also proves that legal quiet moves preserve
-the ordered material signature, including relative ownership, and that their
-actual routed addresses stay in the same material/measure component with the
-same key width. This establishes quiet-component closure without enumerating
-positions. `src/chess_cache.bend` derives reset stages directly from destination
-positions and produces shared clock-solver reset edges, retaining explicit
-failure for missing dependencies. Its proof establishes that every legal reset
-finds its stage in a sufficiently completed schedule, for any component builder,
-and that a registered exact-width material table returns its exact stored value.
-`src/material_directory.bend` supplies a common bounded material builder and
-connects it to that scheduler. It covers every ordered signature up to the
-non-king piece bound, including pawns, both relative owners, repeated pieces,
-and the empty KK signature. Structural proofs establish directory and schedule
-completeness, and prove legal reset lookup succeeds using only the source-size
-and completed-stage bounds—no assumed registration. Promotion, capture, and EP
-cannot increase the material count, so successors remain within the bound.
-The generic directory theorem leaves the solver callback's values unconstrained.
-The executable common compiler described below now supplies a clock solver;
-its global semantic cache invariant and production integration remain pending. This
-deliberately dense catalog is a correctness-first implementation, not a speed
-or storage-efficiency claim. It has not been run to generate four-man tables.
-A material signature alone does not identify a rank-specific component; the
-common measure is not yet wired into production stage selection.
-Pawnful four-man byte lists still use the game evaluator.
+### Pawnless four-man files
 
-### Toward an N-men solver
-
-`src/position.bend` defines one material signature and board representation for
-any number of non-king pieces. Kinds include pawns and Q/R/B/N; ownership is
-relative to a per-position anchor color. Kings, turn and explicit en-passant
-state are common to every material. Ordered slots also support identical pieces.
-
-`src/position_index.bend` provides one recursive index, with six bits per extra
-piece and a 21-bit frame. Structural proofs establish lossless decoding and
-injectivity for arbitrary piece counts, without enumerating positions.
-`src/position_legacy.bend` supplies proved lossless three-/four-man board
-conversions and position-preserving embeddings for pawnless tables and KPK.
-
-`src/chess.bend` implements common move rules over these positions: arbitrary
-piece lists, all promotions, double pushes, captures and en passant. Move
-enumeration is proved complete and sound, and successors preserve validity.
-It also supplies terminal detection and a common clock-reset predicate.
-
-`src/position_address.bend` derives a runtime-sized material signature and key
-from any common position, without a material-family switch. Its address round-trip
-and non-aliasing proofs cover arbitrary piece lists, promotions and EP state.
-`src/chess_graph.bend` builds unresolved quiet/reset edges with these addresses.
-A structural proof shows that decoding its graph preserves every successor and
-terminal result of the common chess rules; separate laws preserve the clock policy.
-Reset edges remain addresses until their dependencies are resolved, so a missing
-dependency cannot be mistaken for a draw at this stage.
-
-`src/chess_solver.bend` connects the common graph directly to the shared clock
-solver. One executable pipeline builds every bounded material signature at each
-measure stage, resolves reset addresses from completed stages, and solves clock
-layers. Compilation is explicitly fallible: missing dependencies or mismatched
-quiet-key widths abort the build, without publishing a partial directory.
-Off-stage index slots are padding, not assertions of drawn chess positions.
-Structural proofs preserve node minimax backups, exact position-key lookup in
-successfully compiled graphs, and actual clock-layer updates. Each successfully
-compiled component returns the minimax value of its compiled finite game.
-`src/chess_compile_total.bend` additionally proves that every chess node compiles
-against the total directory schedule, given only source material-size and
-completed-stage bounds. Legal quiet moves have the correct key width; legal
-resets resolve from earlier stages. Structural induction over the move scan
-lifts these facts to complete nodes without enumerating positions in the proof.
-Castling is assumed unavailable throughout roots and continuations.
-
-The cache invariant now specifies exact outcome reads for every bounded address
-in completed stages, constraining only live entries rather than padding.
-Its extension theorem preserves older reads, and legal reset values follow from
-the invariant and the strict chess measure. An induction over the actual
-fallible `chess_solver.generate` establishes this invariant for successful
-results, conditional on `StageRule`: the actual directory builder must preserve
-the expected chess meaning at each new stage. This is a parametric theorem, not
-an unconditional WDL proof; the component semantic premise and successful
-generation still need to be established.
-
-Remaining for the cached alternative: prove that this fallible pipeline always compiles the required
-components and that its earlier-stage cached values are correct chess outcomes,
-then migrate the file generators to the common graph and index. The new pipeline
-does not yet replace those generators. Its compiler and component theorems are
-NOT a completed N-men chess WDL proof: reset summaries still need the global
-semantic cache induction. No four-man tables were generated for this work.
-Existing file formats remain unchanged. No speed or compactness claim is made
-for the new internal index. Legacy stored roots exclude EP rights; the direct
-common generator includes EP states in its internal-key files.
-
-## Generate pawnless four-man tables
-
-`four_main.bend` is a separate, opt-in executable. With the output directory
-already created:
+Full four-man generation is opt-in; proof checking never runs it.
 
 ```sh
 mkdir -p build
@@ -259,134 +128,71 @@ mise exec -- bend four_main.bend -o build/bendbase-four
 # KQRK: both extras belong to the same player.
 ./build/bendbase-four -- q r same build/kqrk.wdl
 
-# KQKR: the extras belong to opposing players.
+# KQKR: extras belong to opposing players.
 ./build/bendbase-four -- q r opposed build/kqkr.wdl
 
-# All 20 canonical pawnless four-man material configurations.
+# All 20 canonical pawnless material configurations.
 ./build/bendbase-four -- --all build
 ```
 
-Kinds are lowercase `q/r/b/n`; either order is accepted for a single table.
-Keep that order when encoding its positions. Batch generation uses Q, R, B, N
-order, includes both color reversals in each file, and shares its three-man
-capture dependencies across files. Each output is 64 MiB, one signed byte per
-26-bit slot. Existing output files are overwritten. No arguments just prints help.
+Kinds are `q/r/b/n`; either order is accepted for a single table. Keep that
+order when encoding positions. Batch generation uses Q, R, B, N order and
+shares three-man capture dependencies. Existing files are overwritten.
 The first `--` separates Bend runtime options from generator arguments.
+No practical four-man generation-time or memory guarantee is established.
 
-The generator computes a terminal layer followed by 100 reversible-clock layers.
-Each layer reads previously solved positions instead of recursively evaluating
-their game trees. Captures consult completed three-man tables at a fresh clock.
-Those dependencies use the same generalized move rules as the chess semantics, rather
-than assuming equivalence with the older three-man implementation. Table halves
-are built in parallel; preceding layers are shared during each sweep.
+## File formats
 
-The law `generated_pawnless_four_wdl_is_fully_correct` proves serialized-byte
-correctness directly. Induction relates each cached clock layer to the legal
-game tree, then the generic strategy theorem establishes WDL. No intermediate
-solver-equivalence theorem is needed. The proof also establishes that move transitions
-preserve the piece kinds and ownership needed for correct cache lookup.
-
-This is an executable dynamic-programming implementation, **not a demonstrated
-Syzygy-speed generator**. Full generation time and peak memory have not been
-measured. It still uses dense tree-shaped tables and the generalized move scan;
-faster move enumeration, compact storage, and benchmarking remain future work.
-
-## Four-man positions with one pawn
-
-The proof also covers two kings, exactly one pawn, and one queen, rook, bishop,
-or knight, with either ownership relation and either pawn color. The rules
-include pawn captures, single/double pushes, all four promotions (including
-capture-promotions), and post-move king safety with every blocker accounted for.
-
-Quiet king/piece moves consume the clock. Pawn moves and captures reset it.
-Capturing the extra piece enters KPK; capturing the pawn enters pawnless
-three-man chess; promotion enters pawnless three- or four-man chess. The proof
-decreases actual pawn distance and then remaining clock, with lower-material
-and pawnless continuations handled by the existing game definitions.
-
-`one_pawn_tables.Profile` specifies the non-pawn kind and whether its owner
-opposes the pawn. The byte layout is the same 26-bit layout above,
-with the pawn as the first piece and the extra piece as the second. The public
-law `one_pawn_four_wdl_is_fully_correct` certifies the serialized WDL bytes in
-both directions for both players, without enumerating positions.
-
-The one-pawn byte-list definition uses the generic game evaluator directly,
-without a separate one-pawn solver. An optimized generator remains future work;
-the executable supports only pawnless four-man tables. Proof checking generates
-no tables.
-
-## Four-man positions with two pawns
-
-The proof now includes KPPK and KPKP, completing the four-man material classes.
-Both pawn colors, ownership relations, and sides to move are covered. It includes
-single/double pushes, captures, all four promotions, and en passant with immediate
-expiry and post-capture king safety. Captures enter KPK; promotions enter the
-one-pawn game. Termination follows the two actual pawn distances, then the clock.
-
-To keep the implementation small, the table definition uses the existing generic
-minimax evaluator directly and reuses the 26-bit index. `two_pawn_tables.Profile`
-contains only `opposed`: false for KPPK, true for KPKP. Each specified file has
-one byte per slot (64 MiB), with the same encoding as the other four-man files.
-The law `two_pawn_four_wdl_is_fully_correct` connects those serialized bytes to
-perfect-play strategies in both directions, alongside move soundness,
-completeness, successor safety, and exact file-length proofs.
-
-Stored roots have halfmove clock zero **and no en passant right**. These are
-separate restrictions: a double push resets the clock to zero, too. En passant
-is fully included during calculation after subsequent double pushes, but an
-initial position with an en passant right cannot be looked up in these files.
-The two-pawn implementation remains a slow specification-level definition, not an
-executable dynamic-programming generator.
-No four-man tables are generated during proof checking or by `main.bend`.
-
-## Generate
-
-The repository pins Clang through mise. With Bend installed:
-
-```sh
-mkdir -p build
-mise exec -- bend main.bend -o build/bendbase
-./build/bendbase
-```
-
-The generator writes five files in `build/`. Pawnless tables use 100 clock
-layers. KPK solves each pawn rank at all clocks, starting nearest promotion;
-pawn pushes use completed rank tables at a fresh clock, and promotions use
-the pawnless tables. Both colors and all four promotion choices are included.
-This implementation prioritizes the proof; full table generation has not yet
-been run or benchmarked. Obsolete tables from the earlier implementation have
-been removed.
-
-## File format
-
-Each three-man file has 1,048,576 entries, one signed byte per encoded position
-(four-man files have 67,108,864 entries):
+All formats use one byte per index slot:
 
 | Byte | Meaning |
 | --- | --- |
 | `1` | White can force a win |
 | `0` | Draw under perfect play |
-| `-1` (`0xFF`) | Black can force a win |
+| `255` (`-1` signed) | Black can force a win |
 
-Squares use `a1 = 0` through `h8 = 63`. The 20-bit key, most significant bit
-first, concatenates `owner`, `turn`, `piece[5..0]`, `black_king[5..0]`, and
-`white_king[5..0]`. Owner and turn use `0` for White and `1` for Black.
-Its ordinary binary value is the byte offset:
+Squares are `a1 = 0` through `h8 = 63`; owner and turn are 0 for White and
+1 for Black. The binary key value is the byte offset. These are custom files,
+not Syzygy-compatible files. Invalid placements occupy slots; apply the
+appropriate domain's validity predicate before interpreting a chess result.
+Files do not encode arbitrary nonzero halfmove clocks or repetition history.
+
+**Specialized three-man:** a 20-bit index, 1 MiB per file. From most to least
+significant: owner, turn, piece square, black king, white king.
 
 ```text
 offset = white_king + 64 * black_king + 4096 * piece
        + 262144 * turn + 524288 * owner
 ```
 
-The formal offset is `Finite.offset(20n, Index.encode(board))`. The file names
-are `kqk.wdl`, `krk.wdl`, `kbk.wdl`, `knk.wdl`, and `kpk.wdl`. These are simple custom WDL
-files, not Syzygy-compatible files. Invalid placements occupy zero-valued slots;
-callers must apply `Chess.valid` (pawnless) or `Pawn.valid_board` (KPK) before
-interpreting an entry as a chess result. KPK uses the pawn square as `piece`;
-unpromoted pawns on the first or eighth rank are invalid.
+KPK uses the pawn square as `piece`; unpromoted pawns on ranks 1 and 8 are
+invalid. EP cannot occur with only one pawn.
 
-Checkmate takes precedence on the move reaching 100 halfmoves. Otherwise that
-boundary is a terminal draw, following the agreed tablebase convention.
-Stalemate, insufficient material, and captures leaving K vs K are draws.
-Every pawn move, including promotion, resets the halfmove clock to zero.
-The files do not store arbitrary nonzero halfmove clocks or repetition history.
+**Specialized four-man:** a 26-bit index, 64 MiB per file. The second piece's
+square occupies the high six bits, above the three-man layout:
+`offset = second_square * 1048576 + three_man_offset`.
+One-pawn profiles put the pawn in the first slot and specify the other piece's
+kind and relative owner. Two-pawn profiles distinguish KPPK from KPKP.
+Stored roots have **no EP rights**, separately from the clock-zero requirement;
+two-pawn continuations still include EP after double pushes.
+
+**Direct common:** `21 + 6n` bits for `n` non-king pieces, with ordered square
+slots followed by EP-enabled, owner, turn, EP target, black king and white king.
+These files include EP states. A three-man file therefore has 27 bits and
+128 MiB of final bytes, unlike a specialized three-man file.
+See [position_index.bend](src/position_index.bend) for the exact encoding.
+
+## Experimental cached solver
+
+The general cached pipeline compiles [chess_graph.bend](src/chess_graph.bend)
+into clock-solver components. Components use ordered material signatures and
+the chess progress measure. Reset addresses read earlier stages; quiet
+addresses stay within the same component. Missing dependencies and mismatched
+widths cause explicit failure, not a draw.
+
+Directory coverage, legal reset ordering, quiet closure, node compilation,
+exact-key lookup and clock-layer updates have supporting proofs. The global
+cache invariant theorem is conditional on `StageRule` at a fixed clock limit
+and successful generation. Discharging those conditions against chess semantics
+is still required before this pipeline can replace the proved direct generator.
+Off-stage entries are padding, not assertions of drawn chess positions.

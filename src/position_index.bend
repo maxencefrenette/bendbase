@@ -6,7 +6,7 @@ import ./word_parts.bend as Parts
 
 # One layout for every material: six square bits per non-king slot, followed
 # by ep-enabled, owner, turn, ep-target, black king, white king (21 bits).
-# This is the new internal layout, NOT a change to existing .wdl file formats.
+# Used by the direct common writer; specialized .wdl files retain their indexes.
 def width(n: Nat) -> Nat:
   match n:
     case 0n:

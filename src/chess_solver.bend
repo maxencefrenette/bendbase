@@ -155,9 +155,10 @@ def next(+stage: Nat, capacity: Nat, limit: Nat, previous: Maybe<&2, List<&2, St
     case Some{+stages}:
       completed(stage, directory(Directory.names(capacity), stage, limit, stages), stages)
 
-# One executable pipeline for all material sizes. No legacy solver dispatch.
-# Kept fallible until compiler completeness and semantic cache induction are
-# discharged; failure is never converted to an outcome or a partial table.
+# Experimental cached pipeline for all material sizes; no legacy dispatch.
+# Compiler completeness and semantic cache induction remain proof obligations
+# for this alternative, not for chess_tables' proved direct generator.
+# Failure is never converted to an outcome or a partial table.
 def generate(count: Nat, +capacity: Nat, +limit: Nat) -> Maybe<&2, List<&2, Stages.Stage>>:
   match count:
     case 0n:

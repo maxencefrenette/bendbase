@@ -128,7 +128,7 @@ def legal(+position: Position, +action: Action) -> Bool:
   (valid(position) && pseudo(position, action)) && valid(after(position, action))
 
 # On legal moves an occupied destination is an enemy non-king piece. This
-# flag is for the next solver's material transition and 50-move clock reset.
+# flag selects the solver's material transition and 50-move clock reset.
 def capture(position: Position, action: Action) -> Bool:
   match position action:
     case Position{turn, wk, bk, men} Action{from, dest}:
