@@ -42,6 +42,10 @@ import ./src/chess_cache_proof.bend as ChessCacheProof
 import ./src/chess_cache.bend as ChessCache
 import ./src/material_directory_proof.bend as MaterialDirectoryProof
 import ./src/chess_solver_proof.bend as ChessSolverProof
+import ./src/chess_compile_total.bend as CompileTotal
+
+def Laws.common_scheduled_chess_nodes_compile(C, solve, actions, count, capacity, context, anchor, board, bounded, material):
+  CompileTotal.node(~C, ~solve, actions, count, capacity, context, anchor, board, bounded, material)
 
 def Laws.common_compiler_preserves_node_backup(width, stages, node, previous):
   ChessSolverProof.node(width, stages, node, previous)

@@ -181,6 +181,12 @@ Off-stage index slots are padding, not assertions of drawn chess positions.
 Structural proofs preserve node minimax backups, exact position-key lookup in
 successfully compiled graphs, and actual clock-layer updates. Each successfully
 compiled component returns the minimax value of its compiled finite game.
+`src/chess_compile_total.bend` additionally proves that every chess node compiles
+against the total directory schedule, given only source material-size and
+completed-stage bounds. Legal quiet moves have the correct key width; legal
+resets resolve from earlier stages. Structural induction over the move scan
+lifts these facts to complete nodes without enumerating positions in the proof.
+Castling is assumed unavailable throughout roots and continuations.
 
 Remaining: prove that this fallible pipeline always compiles the required
 components and that its earlier-stage cached values are correct chess outcomes,

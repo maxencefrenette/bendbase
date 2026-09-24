@@ -33,6 +33,31 @@ import ./src/chess_cache.bend as ChessCache
 import ./src/material_directory.bend as MaterialDirectory
 import ./src/chess_solver.bend as ChessSolver
 import ./src/chess_solver_proof.bend as ChessSolverProof
+import ./src/chess_compile_total.bend as CompileTotal
+
+# Castling is permanently unavailable throughout the modeled game, not just
+# at stored roots. En passant remains modeled in continuations.
+# Material composition plus pawn progress orders reset dependencies; quiet
+# moves use the remaining-clock induction within a component.
+# Compilation below needs only source size and completed-stage bounds. It is
+# proved for the total directory schedule, whose callback values are arbitrary.
+# Establishing the actual fallible generator's schedule and semantic invariant
+# is still required; this law does not assume or assert those values are WDL.
+law common_scheduled_chess_nodes_compile:
+  for ~C: Data
+  for ~solve: @+name: List<&2, Position.Descriptor> -> Nat -> C -> List<&2, Components.Stage> -> Finite.Table(MaterialDirectory.width(name), Game.Outcome)
+  for +actions: Nat
+  for +count: Nat
+  for +capacity: Nat
+  for +context: C
+  for +anchor: Game.Player
+  for +board: Position.Position
+  for bounded: Measure.Le(Measure.position(board), 1n+count)
+  for material: Measure.Le(List.length(&2, Position.Descriptor, ChessComponent.material(anchor, board)), capacity)
+  exs node: ClockSolver.Node<ChessComponent.address_width(PositionAddress.of_position(anchor, board))>
+  {ChessSolver.node(ChessComponent.address_width(PositionAddress.of_position(anchor, board)),
+    MaterialDirectory.schedule(~C, ~solve, count, capacity, context), ChessGraph.node(actions, anchor, board)) == Some{node} :
+    Maybe<&2, ClockSolver.Node<ChessComponent.address_width(PositionAddress.of_position(anchor, board))>>}
 
 # The common executable compiler connects addressed chess nodes to the clock
 # solver for arbitrary material signatures. Missing dependencies abort, never
