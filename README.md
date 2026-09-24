@@ -188,6 +188,16 @@ resets resolve from earlier stages. Structural induction over the move scan
 lifts these facts to complete nodes without enumerating positions in the proof.
 Castling is assumed unavailable throughout roots and continuations.
 
+The cache invariant now specifies exact outcome reads for every bounded address
+in completed stages, constraining only live entries rather than padding.
+Its extension theorem preserves older reads, and legal reset values follow from
+the invariant and the strict chess measure. An induction over the actual
+fallible `chess_solver.generate` establishes this invariant for successful
+results, conditional on `StageRule`: the actual directory builder must preserve
+the expected chess meaning at each new stage. This is a parametric theorem, not
+an unconditional WDL proof; the component semantic premise and successful
+generation still need to be established.
+
 Remaining: prove that this fallible pipeline always compiles the required
 components and that its earlier-stage cached values are correct chess outcomes,
 then migrate the file generators to the common graph and index. The new pipeline

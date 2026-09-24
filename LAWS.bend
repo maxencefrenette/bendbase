@@ -34,6 +34,49 @@ import ./src/material_directory.bend as MaterialDirectory
 import ./src/chess_solver.bend as ChessSolver
 import ./src/chess_solver_proof.bend as ChessSolverProof
 import ./src/chess_compile_total.bend as CompileTotal
+import ./src/chess_cache_invariant.bend as CacheInvariant
+
+# Semantic stage induction is now factored explicitly. These parametric laws
+# do NOT assert that an arbitrary expected function is chess WDL. StageRule
+# remains the component semantic obligation, and generated correctness is
+# conditional on both that rule and successful execution of the real builder.
+# No fallback outcome is introduced to bypass either obligation.
+law common_correct_cache_extends:
+  for ~expected: Position.Position -> Game.Outcome
+  for +count: Nat
+  for +capacity: Nat
+  for +entries: List<&2, MaterialCache.Named>
+  for +previous: List<&2, Components.Stage>
+  for old: CacheInvariant.Correct(~expected, count, capacity, previous)
+  for current: CacheInvariant.Stratum(~expected, 1n+count, capacity, entries)
+  CacheInvariant.Correct(~expected, 1n+count, capacity, Components.Stage{1n+count, entries} <> previous)
+
+law common_invariant_supplies_correct_resets:
+  for ~expected: Position.Position -> Game.Outcome
+  for +width: Nat
+  for +count: Nat
+  for +capacity: Nat
+  for +stages: List<&2, Components.Stage>
+  for +anchor: Game.Player
+  for +board: Position.Position
+  for +move: CommonChess.Action
+  for correct: CacheInvariant.Correct(~expected, count, capacity, stages)
+  for legal: Game.Truth(CommonChess.legal(board, move))
+  for resets: Game.Truth(CommonChess.resets(board, move))
+  for bounded: Measure.Le(Measure.position(board), 1n+count)
+  for material: Measure.Le(List.length(&2, Position.Descriptor, ChessComponent.material(anchor, board)), capacity)
+  {ChessCache.reset(width, stages, ChessGraph.address(ChessGraph.route(anchor, board, move))) ==
+    Some{ClockSolver.Reset{expected(PositionAddress.position(ChessGraph.address(ChessGraph.route(anchor, board, move))))}} : Maybe<&2, ClockSolver.Edge<width>>}
+
+law common_generated_cache_invariant:
+  for ~expected: Position.Position -> Game.Outcome
+  for ~sound: CacheInvariant.StageRule(~expected)
+  for +count: Nat
+  for +capacity: Nat
+  for +limit: Nat
+  for +result: List<&2, Components.Stage>
+  for success: {ChessSolver.generate(count, capacity, limit) == Some{result} : Maybe<&2, List<&2, Components.Stage>>}
+  CacheInvariant.Correct(~expected, count, capacity, result)
 
 # Castling is permanently unavailable throughout the modeled game, not just
 # at stored roots. En passant remains modeled in continuations.

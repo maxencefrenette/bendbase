@@ -43,6 +43,17 @@ import ./src/chess_cache.bend as ChessCache
 import ./src/material_directory_proof.bend as MaterialDirectoryProof
 import ./src/chess_solver_proof.bend as ChessSolverProof
 import ./src/chess_compile_total.bend as CompileTotal
+import ./src/chess_cache_invariant_proof.bend as CacheInvariantProof
+import ./src/chess_generated_invariant.bend as GeneratedInvariant
+
+def Laws.common_correct_cache_extends(expected, count, capacity, entries, previous, old, current):
+  CacheInvariantProof.extend(~expected, count, capacity, entries, previous, old, current)
+
+def Laws.common_invariant_supplies_correct_resets(expected, width, count, capacity, stages, anchor, board, move, correct, legal, resets, bounded, material):
+  CacheInvariantProof.reset_edge(~expected, width, count, capacity, stages, anchor, board, move, correct, legal, resets, bounded, material)
+
+def Laws.common_generated_cache_invariant(expected, sound, count, capacity, limit, result, success):
+  GeneratedInvariant.generated(~expected, ~sound, count, capacity, limit, result, success)
 
 def Laws.common_scheduled_chess_nodes_compile(C, solve, actions, count, capacity, context, anchor, board, bounded, material):
   CompileTotal.node(~C, ~solve, actions, count, capacity, context, anchor, board, bounded, material)
