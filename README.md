@@ -136,8 +136,9 @@ and the empty KK signature. Structural proofs establish directory and schedule
 completeness, and prove legal reset lookup succeeds using only the source-size
 and completed-stage bounds—no assumed registration. Promotion, capture, and EP
 cannot increase the material count, so successors remain within the bound.
-The solver callback supplies the values: their semantic WDL correctness, full
-component compilation, and production integration are still pending. This
+The generic directory theorem leaves the solver callback's values unconstrained.
+The executable common compiler described below now supplies a clock solver;
+its global semantic cache invariant and production integration remain pending. This
 deliberately dense catalog is a correctness-first implementation, not a speed
 or storage-efficiency claim. It has not been run to generate four-man tables.
 A material signature alone does not identify a rank-specific component; the
@@ -171,11 +172,22 @@ terminal result of the common chess rules; separate laws preserve the clock poli
 Reset edges remain addresses until their dependencies are resolved, so a missing
 dependency cannot be mistaken for a draw at this stage.
 
-The remaining work is to schedule these address reads under a proved dependency
-order, prove conversion of legacy move rules, and migrate the file generators
-to the common graph and index (their material-cache reads are already shared).
-The common graph builder is not yet used by those generators. Its move/graph
-proofs and the component solver theorem are NOT a completed N-men chess WDL proof.
+`src/chess_solver.bend` connects the common graph directly to the shared clock
+solver. One executable pipeline builds every bounded material signature at each
+measure stage, resolves reset addresses from completed stages, and solves clock
+layers. Compilation is explicitly fallible: missing dependencies or mismatched
+quiet-key widths abort the build, without publishing a partial directory.
+Off-stage index slots are padding, not assertions of drawn chess positions.
+Structural proofs preserve node minimax backups, exact position-key lookup in
+successfully compiled graphs, and actual clock-layer updates. Each successfully
+compiled component returns the minimax value of its compiled finite game.
+
+Remaining: prove that this fallible pipeline always compiles the required
+components and that its earlier-stage cached values are correct chess outcomes,
+then migrate the file generators to the common graph and index. The new pipeline
+does not yet replace those generators. Its compiler and component theorems are
+NOT a completed N-men chess WDL proof: reset summaries still need the global
+semantic cache induction. No four-man tables were generated for this work.
 Existing file formats remain unchanged. No speed or compactness claim is made
 for the new internal index; stored roots will exclude EP rights even though
 continuation states retain them.

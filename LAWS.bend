@@ -31,6 +31,54 @@ import ./src/chess_measure.bend as Measure
 import ./src/chess_component.bend as ChessComponent
 import ./src/chess_cache.bend as ChessCache
 import ./src/material_directory.bend as MaterialDirectory
+import ./src/chess_solver.bend as ChessSolver
+import ./src/chess_solver_proof.bend as ChessSolverProof
+
+# The common executable compiler connects addressed chess nodes to the clock
+# solver for arbitrary material signatures. Missing dependencies abort, never
+# become draws. These are compiler/solver refinement laws, NOT yet a full
+# N-men chess WDL theorem: successful compilation and the semantic invariant
+# of earlier cache stages still need to be established for generate.
+# Inactive-stage slots are padding; correctness only concerns live positions.
+# All proofs below are structural, with position keys left symbolic.
+law common_compiler_preserves_node_backup:
+  for +width: Nat
+  for +stages: List<&2, Components.Stage>
+  for +node: ChessGraph.Node
+  for +previous: Finite.Table(width, Game.Outcome)
+  {ChessSolverProof.node_value(width, ChessSolver.node(width, stages, node), previous) ==
+    ChessSolverProof.backup(width, stages, node, previous) : Maybe<&2, Game.Outcome>}
+
+law common_compiled_graph_has_exact_entries:
+  for +name: List<&2, Position.Descriptor>
+  for +stage: Nat
+  for +stages: List<&2, Components.Stage>
+  for +graph: Finite.Table(MaterialDirectory.width(name), ClockSolver.Node<MaterialDirectory.width(name)>)
+  for +key: Word(MaterialDirectory.width(name))
+  for compiled: {ChessSolver.graph(name, stage, stages) == Some{graph} : Maybe<&2, Finite.Table(MaterialDirectory.width(name), ClockSolver.Node<MaterialDirectory.width(name)>)>}
+  {ChessSolver.entry(name, stage, stages, key) == Some{Finite.get(MaterialDirectory.width(name), ClockSolver.Node<MaterialDirectory.width(name)>, key, graph)} : Maybe<&2, ClockSolver.Node<MaterialDirectory.width(name)>>}
+
+law common_compiled_layer_preserves_entry_backup:
+  for +name: List<&2, Position.Descriptor>
+  for +stage: Nat
+  for +stages: List<&2, Components.Stage>
+  for +graph: Finite.Table(MaterialDirectory.width(name), ClockSolver.Node<MaterialDirectory.width(name)>)
+  for +key: Word(MaterialDirectory.width(name))
+  for +previous: Finite.Table(MaterialDirectory.width(name), Game.Outcome)
+  for compiled: {ChessSolver.graph(name, stage, stages) == Some{graph} : Maybe<&2, Finite.Table(MaterialDirectory.width(name), ClockSolver.Node<MaterialDirectory.width(name)>)>}
+  {Some{Finite.get(MaterialDirectory.width(name), Game.Outcome, key, ClockSolver.layer(MaterialDirectory.width(name), graph, ClockSolver.Next{previous}))} ==
+    ChessSolverProof.node_value(MaterialDirectory.width(name), ChessSolver.entry(name, stage, stages, key), previous) : Maybe<&2, Game.Outcome>}
+
+law common_component_solves_compiled_game:
+  for +name: List<&2, Position.Descriptor>
+  for +stage: Nat
+  for +limit: Nat
+  for +stages: List<&2, Components.Stage>
+  for +graph: Finite.Table(MaterialDirectory.width(name), ClockSolver.Node<MaterialDirectory.width(name)>)
+  for +key: Word(MaterialDirectory.width(name))
+  for compiled: {ChessSolver.graph(name, stage, stages) == Some{graph} : Maybe<&2, Finite.Table(MaterialDirectory.width(name), ClockSolver.Node<MaterialDirectory.width(name)>)>}
+  {ChessSolverProof.table_value(MaterialDirectory.width(name), ChessSolver.component(name, stage, limit, stages), key) ==
+    Some{Game.evaluate(ClockSolver.tree(limit, MaterialDirectory.width(name), graph, key))} : Maybe<&2, Game.Outcome>}
 
 # The common directory enumerates ordered material signatures, not positions:
 # every non-king kind/relative owner, and every length up to capacity. The

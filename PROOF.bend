@@ -41,6 +41,19 @@ import ./src/chess_component_proof.bend as ChessComponentProof
 import ./src/chess_cache_proof.bend as ChessCacheProof
 import ./src/chess_cache.bend as ChessCache
 import ./src/material_directory_proof.bend as MaterialDirectoryProof
+import ./src/chess_solver_proof.bend as ChessSolverProof
+
+def Laws.common_compiler_preserves_node_backup(width, stages, node, previous):
+  ChessSolverProof.node(width, stages, node, previous)
+
+def Laws.common_compiled_graph_has_exact_entries(name, stage, stages, graph, key, compiled):
+  ChessSolverProof.graph(name, stage, stages, graph, key, compiled)
+
+def Laws.common_compiled_layer_preserves_entry_backup(name, stage, stages, graph, key, previous, compiled):
+  ChessSolverProof.layer(name, stage, stages, graph, key, previous, compiled)
+
+def Laws.common_component_solves_compiled_game(name, stage, limit, stages, graph, key, compiled):
+  ChessSolverProof.component(name, stage, limit, stages, graph, key, compiled)
 
 def Laws.common_material_directory_is_complete(C, solve, capacity, name, context, bounded):
   MaterialDirectoryProof.build(~C, ~solve, capacity, name, context, bounded)
