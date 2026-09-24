@@ -10,6 +10,7 @@ import ./pawnless_tables.bend as Pawnless
 import ./pawnless_tables_proof.bend as PawnlessProof
 import ./pawn_tables.bend as Tables
 import ./table_engine_proof.bend as EngineProof
+import ./pawn_component_proof.bend as ComponentProof
 
 def position_square(+owner: Game.Player, +turn: Game.Player, +wk: Word(6n), +bk: Word(6n),
   +rank: Word(3n), +file: Word(3n)) ->
@@ -25,31 +26,17 @@ def position_board(+advance: Nat, +position: Pawn.Position) ->
     case Pawn.Position{owner, turn, wk, bk, file}:
       position_square(owner, turn, wk, bk, Pawn.rank(advance, owner), file)
 
-def layer_get(depth: Nat, +width: Nat, +step: Tables.Layer<width>,
-  +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
-  {Finite.get(depth, Game.Outcome, key, Tables.layer(depth, width, step, keys)) ==
-   Tables.at(width, step, Pawn.position(Index.decode_at(width, Finite.get(depth, Word(width), key, keys)))) : Game.Outcome}:
-  EngineProof.fill_get(~Tables.LayerContext, ~Tables.entry, depth, width, 0n, step, keys, key)
-
-def layer_lookup(+width: Nat, +step: Tables.Layer<width>, +key: Word(width)) ->
-  {Finite.get(width, Game.Outcome, key, Tables.layer(width, width, step, Finite.keys(width))) ==
-   Tables.at(width, step, Pawn.position(Index.decode_at(width, key))) : Game.Outcome}:
-  %FiniteProof.keys_get(width, key) :
-    {Finite.get(width, Game.Outcome, key, Tables.layer(width, width, step, Finite.keys(width))) ==
-     Tables.at(width, step, Pawn.position(Index.decode_at(width, _))) : Game.Outcome}
-  layer_get(width, width, step, Finite.keys(width), key)
-
-def lookup_layer(+advance: Nat, +position: Pawn.Position, +width: Nat, +size: {width == 20n : Nat},
-  +step: Tables.Layer<width>) ->
-  {Tables.lookup(width, advance, position, Tables.layer(width, width, step, Finite.keys(width))) ==
-   Tables.at(width, step, position) : Game.Outcome}:
+def lookup_clock(+remaining: Nat, +advance: Nat, +position: Pawn.Position, +width: Nat, +size: {width == 20n : Nat},
+  +lower: Tables.Ranks<width>, +promotions: Tables.Promotions<width>) ->
+  {Tables.lookup(width, advance, position, Tables.clock(remaining, advance, width, lower, promotions)) ==
+   Tables.at(width, Tables.phase(remaining, advance, width, lower, promotions), position) : Game.Outcome}:
   %position_board(advance, position) :
-    {Tables.lookup(width, advance, position, Tables.layer(width, width, step, Finite.keys(width))) ==
-     Tables.at(width, step, _) : Game.Outcome}
+    {Tables.lookup(width, advance, position, Tables.clock(remaining, advance, width, lower, promotions)) ==
+     Tables.at(width, Tables.phase(remaining, advance, width, lower, promotions), _) : Game.Outcome}
   %IndexProof.roundtrip_at(width, size, Pawn.board(advance, position)) :
-    {Tables.lookup(width, advance, position, Tables.layer(width, width, step, Finite.keys(width))) ==
-     Tables.at(width, step, Pawn.position(_)) : Game.Outcome}
-  layer_lookup(width, step, Index.encode_at(width, Pawn.board(advance, position)))
+    {Tables.lookup(width, advance, position, Tables.clock(remaining, advance, width, lower, promotions)) ==
+     Tables.at(width, Tables.phase(remaining, advance, width, lower, promotions), Pawn.position(_)) : Game.Outcome}
+  ComponentProof.clock_get(remaining, advance, width, lower, promotions, Index.encode_at(width, Pawn.board(advance, position)))
 
 def draws_get(depth: Nat, +key: Word(depth)) ->
   {Finite.get(depth, Game.Outcome, key, Tables.draws(depth)) == Game.Draw{} : Game.Outcome}:
@@ -97,14 +84,16 @@ def sources(+advance: Nat, clock: Nat, +width: Nat, +limit: Nat) -> Tables.Sourc
 def lookup_base(+advance: Nat, +position: Pawn.Position, +width: Nat, +size: {width == 20n : Nat}, +limit: Nat) ->
   {Tables.lookup(width, 1n+advance, position, Tables.solve(1n+advance, 0n, width, limit, Tables.promotions(limit, width))) ==
    Game.evaluate(Pawn.boundary(Pawn.view(1n+advance, position))) : Game.Outcome}:
-  lookup_layer(1n+advance, position, width, size, Tables.Boundary{1n+advance})
+  lookup_clock(0n, 1n+advance, position, width, size,
+    Tables.history(advance, width, limit, Tables.promotions(limit, width)), Tables.promotions(limit, width))
 
 def lookup_step(+advance: Nat, +clock: Nat, +position: Pawn.Position, +width: Nat,
   +size: {width == 20n : Nat}, +limit: Nat) ->
   {Tables.lookup(width, 1n+advance, position, Tables.solve(1n+advance, 1n+clock, width, limit, Tables.promotions(limit, width))) ==
    Tables.combine(Pawn.view(1n+advance, position),
      Tables.values(Pawn.tasks(Pawn.view(1n+advance, position)), 1n+advance, width, sources(advance, clock, width, limit))) : Game.Outcome}:
-  lookup_layer(1n+advance, position, width, size, Tables.Step{1n+advance, sources(advance, clock, width, limit)})
+  lookup_clock(1n+clock, 1n+advance, position, width, size,
+    Tables.history(advance, width, limit, Tables.promotions(limit, width)), Tables.promotions(limit, width))
 
 def assemble_evaluate(+view: Pawn.View, +trees: List<&2, Game.Tree>) ->
   {Tables.combine(view, PawnlessProof.outcomes(trees)) == Game.evaluate(Pawn.assemble(view, trees)) : Game.Outcome}:
@@ -432,11 +421,13 @@ def forest_correct(+advance: Nat, +remaining: Nat, +stage: Nat, +items: List<&2,
         PawnlessProof.outcomes(Pawn.forest(1n, 1n+clock, 0n, tail, limit)),
         {==}, forest_correct(1n, 1n+clock, 0n, tail, width, size, limit))
 
-def layer_position(+advance: Nat, +board: Chess.Board, +width: Nat, +size: {width == 20n : Nat}, +step: Tables.Layer<width>) ->
-  {Finite.get(width, Game.Outcome, Index.encode_at(width, board), Tables.layer(width, width, step, Finite.keys(width))) ==
-   Tables.lookup(width, advance, Pawn.position(board), Tables.layer(width, width, step, Finite.keys(width))) : Game.Outcome}:
+def clock_position(+advance: Nat, +remaining: Nat, +board: Chess.Board, +width: Nat, +size: {width == 20n : Nat},
+  +lower: Tables.Ranks<width>, +promotions: Tables.Promotions<width>) ->
+  {Finite.get(width, Game.Outcome, Index.encode_at(width, board), Tables.clock(remaining, advance, width, lower, promotions)) ==
+   Tables.lookup(width, advance, Pawn.position(board), Tables.clock(remaining, advance, width, lower, promotions)) : Game.Outcome}:
   +position = Pawn.position(board)
-  +table = Tables.layer(width, width, step, Finite.keys(width))
+  +table = Tables.clock(remaining, advance, width, lower, promotions)
+  +step = Tables.phase(remaining, advance, width, lower, promotions)
   Equal.trans(Game.Outcome,
     Finite.get(width, Game.Outcome, Index.encode_at(width, board), table),
     Tables.at(width, step, position), Tables.lookup(width, advance, position, table),
@@ -444,11 +435,11 @@ def layer_position(+advance: Nat, +board: Chess.Board, +width: Nat, +size: {widt
       Finite.get(width, Game.Outcome, Index.encode_at(width, board), table),
       Tables.at(width, step, Pawn.position(Index.decode_at(width, Index.encode_at(width, board)))),
       Tables.at(width, step, position),
-      layer_lookup(width, step, Index.encode_at(width, board)),
+      ComponentProof.clock_get(remaining, advance, width, lower, promotions, Index.encode_at(width, board)),
       Equal.cong(Chess.Board, Game.Outcome, input => Tables.at(width, step, Pawn.position(input)),
         Index.decode_at(width, Index.encode_at(width, board)), board, IndexProof.roundtrip_at(width, size, board))),
     Equal.sym(Game.Outcome, Tables.lookup(width, advance, position, table), Tables.at(width, step, position),
-      lookup_layer(advance, position, width, size, step)))
+      lookup_clock(remaining, advance, position, width, size, lower, promotions)))
 
 def solve_position(+advance: Nat, +remaining: Nat, +board: Chess.Board,
   +width: Nat, +size: {width == 20n : Nat}, +limit: Nat) ->
@@ -463,9 +454,11 @@ def solve_position(+advance: Nat, +remaining: Nat, +board: Chess.Board,
         Equal.sym(Game.Outcome, Tables.lookup(width, 0n, Pawn.position(board), Tables.draws(width)), Game.Draw{},
           draws_get(width, Index.encode_at(width, Pawn.board(0n, Pawn.position(board))))))
     case 1n+prior 0n:
-      layer_position(1n+prior, board, width, size, Tables.Boundary{1n+prior})
+      clock_position(1n+prior, 0n, board, width, size,
+        Tables.history(prior, width, limit, Tables.promotions(limit, width)), Tables.promotions(limit, width))
     case 1n+prior 1n+clock:
-      layer_position(1n+prior, board, width, size, Tables.Step{1n+prior, sources(prior, clock, width, limit)})
+      clock_position(1n+prior, 1n+clock, board, width, size,
+        Tables.history(prior, width, limit, Tables.promotions(limit, width)), Tables.promotions(limit, width))
 
 def solved_board(+limit: Nat, +width: Nat, +size: {width == 20n : Nat}, +board: Chess.Board) ->
   {Finite.get(width, Game.Outcome, Index.encode_at(width, board),

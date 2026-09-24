@@ -15,18 +15,6 @@ def fill(~C: Nat -> Nat -> Data,
       a b = fill(~C, ~entry, rest, width, low, context, left) fill(~C, ~entry, rest, width, low, context, right)
       Finite.Fork{a, b}
 
-# Boundary includes checkmate before the clock draw. A step reads only the
-# preceding reversible-clock layer and the adapter's completed dependencies.
-def generate(~C: Nat -> Nat -> Data,
-  ~initial: @+width: Nat -> @+low: Nat -> C(width, low) -> Finite.Table(width, Game.Outcome),
-  ~step: @+width: Nat -> @+low: Nat -> C(width, low) -> Finite.Table(width, Game.Outcome) -> Finite.Table(width, Game.Outcome),
-  remaining: Nat, +width: Nat, +low: Nat, +context: C(width, low)) -> Finite.Table(width, Game.Outcome):
-  match remaining:
-    case 0n:
-      initial(width, low, context)
-    case 1n+rest:
-      step(width, low, context, generate(~C, ~initial, ~step, rest, width, low, context))
-
 def fold(rest: List<&2, Game.Outcome>, +turn: Game.Player, first: Game.Outcome) -> Game.Outcome:
   match rest:
     case Nil{}:

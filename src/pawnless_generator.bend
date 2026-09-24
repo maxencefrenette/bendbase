@@ -7,6 +7,7 @@ import ./material_chess.bend as Chess
 import ./four_chess.bend as Rules
 import ./finite_table.bend as Finite
 import ./table_engine.bend as Engine
+import ./clock_solver.bend as Solver
 
 # Clock-layer dynamic programming over the SAME generalized move rules as
 # the chess semantics. No recursive game evaluation occurs in a layer.
@@ -43,17 +44,20 @@ def lower_value(+width: Nat, lower: Maybe<&2, Bundle<width>>, kind: Three.Materi
     case Some{bundle}:
       Finite.get(width, Game.Outcome, Index.encode_at(width, board), select(width, kind, bundle))
 
-def lookup(+width: Nat, +low: Nat, scope: Scope, previous: Finite.Table(width, Game.Outcome),
-  lower: Maybe<&2, Bundle<low>>, position: Chess.Position) -> Game.Outcome:
+def edge(+width: Nat, +low: Nat, scope: Scope, lower: Maybe<&2, Bundle<low>>, position: Chess.Position) -> Solver.Edge<width>:
   match scope position:
     case Single{kind} Chess.Position{turn, wk, bk, Chess.Man{owner, actual, pc} <> Nil{}}:
-      Finite.get(width, Game.Outcome, Index.encode_at(width, Three.Board{owner, turn, wk, bk, pc}), previous)
+      Solver.Quiet{Index.encode_at(width, Three.Board{owner, turn, wk, bk, pc})}
     case Double{material} Chess.Position{turn, wk, bk, Chess.Man{owner, kind, pc} <> Nil{}}:
-      lower_value(low, lower, kind, Three.Board{owner, turn, wk, bk, pc})
+      Solver.Reset{lower_value(low, lower, kind, Three.Board{owner, turn, wk, bk, pc})}
     case Double{material} Chess.Position{turn, wk, bk, Chess.Man{owner, first, pc} <> Chess.Man{other, second, at} <> Nil{}}:
-      Finite.get(width, Game.Outcome, FourIndex.encode_at(width, FourIndex.Board{Three.Board{owner, turn, wk, bk, pc}, at}), previous)
+      Solver.Quiet{FourIndex.encode_at(width, FourIndex.Board{Three.Board{owner, turn, wk, bk, pc}, at})}
     case _ _:
-      Game.Draw{}
+      Solver.Reset{Game.Draw{}}
+
+def lookup(+width: Nat, +low: Nat, scope: Scope, previous: Finite.Table(width, Game.Outcome),
+  lower: Maybe<&2, Bundle<low>>, position: Chess.Position) -> Game.Outcome:
+  Solver.edge_value(width, edge(width, low, scope, lower, position), previous)
 
 def values(positions: List<&2, Chess.Position>, +width: Nat, +low: Nat, +scope: Scope,
   +previous: Finite.Table(width, Game.Outcome), +lower: Maybe<&2, Bundle<low>>) -> List<&2, Game.Outcome>:
@@ -62,10 +66,6 @@ def values(positions: List<&2, Chess.Position>, +width: Nat, +low: Nat, +scope: 
       Nil{}
     case head <> tail:
       lookup(width, low, scope, previous, lower, head) <> values(tail, width, low, scope, previous, lower)
-
-type Layer<-width: Nat> is Data:
-  Initial{}
-  Next{previous: Finite.Table(width, Game.Outcome)}
 
 def combine(view: Rules.View, values: List<&2, Game.Outcome>) -> Game.Outcome:
   match view values:
@@ -76,56 +76,53 @@ def combine(view: Rules.View, values: List<&2, Game.Outcome>) -> Game.Outcome:
     case Rules.Play{turn, children} head <> tail:
       Engine.fold(tail, turn, head)
 
-def at(+width: Nat, +low: Nat, +scope: Scope, layer: Layer<width>, lower: Maybe<&2, Bundle<low>>,
+def at(+width: Nat, +low: Nat, +scope: Scope, layer: Solver.Layer<width>, lower: Maybe<&2, Bundle<low>>,
   moves: Nat, position: Chess.Position) -> Game.Outcome:
   match layer:
-    case Initial{}:
+    case Solver.Initial{}:
       Game.evaluate(Rules.boundary(Rules.view(moves, position)))
-    case Next{previous}:
+    case Solver.Next{previous}:
       +node = Rules.view(moves, position)
       combine(node, values(Rules.children(node), width, low, scope, previous, lower))
 
-type Config<-low: Nat> is Data:
-  Config{scope: Scope, lower: Maybe<&2, Bundle<low>>, moves: Nat}
+def edges(positions: List<&2, Chess.Position>, +width: Nat, +low: Nat, +scope: Scope,
+  +lower: Maybe<&2, Bundle<low>>) -> List<&2, Solver.Edge<width>>:
+  match positions:
+    case Nil{}:
+      Nil{}
+    case head <> tail:
+      edge(width, low, scope, lower, head) <> edges(tail, width, low, scope, lower)
 
-type EntryContext<-width: Nat, -low: Nat> is Data:
-  EntryContext{config: Config<low>, layer: Layer<width>}
+def node(+width: Nat, low: Nat, scope: Scope, lower: Maybe<&2, Bundle<low>>, view: Rules.View) -> Solver.Node<width>:
+  match view:
+    case Rules.Stop{result}:
+      Solver.Terminal{result}
+    case Rules.Play{turn, positions}:
+      Solver.Choice{turn, edges(positions, width, low, scope, lower)}
 
-def LayerContext(width: Nat, low: Nat) -> Data:
-  EntryContext<width, low>
+def graph_fill(depth: Nat, +width: Nat, +low: Nat, +scope: Scope, +moves: Nat,
+  +lower: Maybe<&2, Bundle<low>>, keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Solver.Node<width>):
+  match depth keys:
+    case 0n key:
+      node(width, low, scope, lower, Rules.view(moves, decode(width, scope, key)))
+    case 1n++rest Finite.Fork{left, right}:
+      a b = graph_fill(rest, width, low, scope, moves, lower, left) graph_fill(rest, width, low, scope, moves, lower, right)
+      Finite.Fork{a, b}
 
-def entry(+width: Nat, +low: Nat, context: EntryContext<width, low>, key: Word(width)) -> Game.Outcome:
-  match context:
-    case EntryContext{Config{+scope, lower, moves}, layer}:
-      at(width, low, scope, layer, lower, moves, decode(width, scope, key))
+def graph(+width: Nat, low: Nat, scope: Scope, moves: Nat, lower: Maybe<&2, Bundle<low>>) -> Finite.Table(width, Solver.Node<width>):
+  graph_fill(width, width, low, scope, moves, lower, Finite.keys(width))
 
-def fill(depth: Nat, width: Nat, low: Nat, scope: Scope, layer: Layer<width>,
-  lower: Maybe<&2, Bundle<low>>, moves: Nat, keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
-  Engine.fill(~LayerContext, ~entry, depth, width, low, EntryContext{Config{scope, lower, moves}, layer}, keys)
-
-def Context(width: Nat, low: Nat) -> Data:
-  Config<low>
-
-def boundary(+width: Nat, +low: Nat, config: Config<low>) -> Finite.Table(width, Game.Outcome):
-  Engine.fill(~LayerContext, ~entry, width, width, low, EntryContext{config, Initial{}}, Finite.keys(width))
-
-def sweep(+width: Nat, +low: Nat, config: Config<low>,
-  previous: Finite.Table(width, Game.Outcome)) -> Finite.Table(width, Game.Outcome):
-  Engine.fill(~LayerContext, ~entry, width, width, low, EntryContext{config, Next{previous}}, Finite.keys(width))
-
-# Captures consult immutable lower-material dependencies, not the previous
-# four-man clock layer. The shared engine owns the reversible-clock iteration.
-def generate(remaining: Nat, width: Nat, low: Nat, scope: Scope, moves: Nat,
+def generate(remaining: Nat, +width: Nat, low: Nat, scope: Scope, moves: Nat,
   lower: Maybe<&2, Bundle<low>>) -> Finite.Table(width, Game.Outcome):
-  Engine.generate(~Context, ~boundary, ~sweep, remaining, width, low, Config{scope, lower, moves})
+  Solver.generate(remaining, width, graph(width, low, scope, moves, lower))
 
 def phase(remaining: Nat, +width: Nat, +low: Nat, +scope: Scope, +moves: Nat,
-  +lower: Maybe<&2, Bundle<low>>) -> Layer<width>:
+  +lower: Maybe<&2, Bundle<low>>) -> Solver.Layer<width>:
   match remaining:
     case 0n:
-      Initial{}
+      Solver.Initial{}
     case 1n+rest:
-      Next{generate(rest, width, low, scope, moves, lower)}
+      Solver.Next{generate(rest, width, low, scope, moves, lower)}
 
 def singles(+limit: Nat, +width: Nat, +moves: Nat) -> Bundle<width>:
   q r = generate(limit, width, width, Single{Three.Queen{}}, moves, None{}) generate(limit, width, width, Single{Three.Rook{}}, moves, None{})

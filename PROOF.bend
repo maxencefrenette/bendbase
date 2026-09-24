@@ -25,6 +25,29 @@ import ./src/two_pawn_tables_proof.bend as TwoPawnProof
 import ./src/pawnless_generator_proof.bend as GeneratorProof
 import ./src/position_index_proof.bend as PositionIndexProof
 import ./src/position_legacy_proof.bend as PositionLegacyProof
+import ./src/chess_moves_proof.bend as CommonMovesProof
+import ./src/clock_solver.bend as ClockSolver
+import ./src/clock_solver_proof.bend as ClockSolverProof
+
+def Laws.common_legal_moves_are_complete(width, format, position, move, legal):
+  CommonMovesProof.every_action(width, format, position, move, legal)
+
+def Laws.common_legal_moves_are_sound(width, position, next, member):
+  CommonMovesProof.present_legal(width, position, next, member)
+
+def Laws.common_successors_preserve_validity(width, position, next, member):
+  CommonMovesProof.successor_valid(width, position, next, member)
+
+def Laws.common_clock_component_wdl_is_correct(remaining, width, graph, key):
+  +game = ClockSolver.tree(remaining, width, graph, key)
+  (Game.evaluate(game),
+    (ClockSolverProof.serialized_value(remaining, width, graph, key),
+     +player =>
+       (yes => GameProof.sound(game, player, yes),
+        strategy => GameProof.complete(game, player, strategy))))
+
+def Laws.common_clock_component_file_has_exact_length(remaining, width, graph):
+  ClockSolverProof.file_length(remaining, width, graph)
 
 def Laws.general_position_index_roundtrip(n, board):
   PositionIndexProof.roundtrip(n, board)

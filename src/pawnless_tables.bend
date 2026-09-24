@@ -4,6 +4,7 @@ import ./pawnless_chess.bend as Chess
 import ./pawnless_index.bend as Index
 import ./finite_table.bend as Finite
 import ./table_engine.bend as Engine
+import ./clock_solver.bend as Solver
 
 def values(states: List<&2, Chess.State>, +width: Nat,
   +table: Finite.Table(width, Game.Outcome)) -> List<&2, Game.Outcome>:
@@ -34,46 +35,38 @@ def at(+width: Nat, material: Chess.Material, previous: Finite.Table(width, Game
   +node = Chess.view(material, Chess.Three{board})
   combine(node, values(Chess.children(node), width, previous))
 
-def step(+width: Nat, material: Chess.Material, previous: Finite.Table(width, Game.Outcome), key: Word(width)) -> Game.Outcome:
-  at(width, material, previous, Index.decode_at(width, key))
+# Compile the component once. Reversible moves keep their table key; every
+# capture in this domain enters bare kings, whose completed result is Draw.
+def edges(states: List<&2, Chess.State>, +width: Nat) -> List<&2, Solver.Edge<width>>:
+  match states:
+    case Nil{}:
+      Nil{}
+    case Chess.KingsOnly{} <> tail:
+      Solver.Reset{Game.Draw{}} <> edges(tail, width)
+    case Chess.Three{board} <> tail:
+      Solver.Quiet{Index.encode_at(width, board)} <> edges(tail, width)
 
-# The adapter supplies chess-specific entries; traversal and clock iteration
-# belong to Engine. These small projections are also used by the chess proof.
-type Layer<-width: Nat> is Data:
-  Initial{material: Chess.Material}
-  Next{material: Chess.Material, previous: Finite.Table(width, Game.Outcome)}
+def node(+width: Nat, view: Chess.View) -> Solver.Node<width>:
+  match view:
+    case Chess.Stop{result}:
+      Solver.Terminal{result}
+    case Chess.Play{turn, children}:
+      Solver.Choice{turn, edges(children, width)}
 
-def LayerContext(width: Nat, low: Nat) -> Data:
-  Layer<width>
+def graph_fill(depth: Nat, +width: Nat, +material: Chess.Material,
+  keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Solver.Node<width>):
+  match depth keys:
+    case 0n key:
+      node(width, Chess.view(material, Chess.Three{Index.decode_at(width, key)}))
+    case 1n++rest Finite.Fork{left, right}:
+      a b = graph_fill(rest, width, material, left) graph_fill(rest, width, material, right)
+      Finite.Fork{a, b}
 
-def entry(+width: Nat, +low: Nat, context: Layer<width>, key: Word(width)) -> Game.Outcome:
-  match context:
-    case Initial{material}:
-      base(width, material, key)
-    case Next{material, previous}:
-      step(width, material, previous, key)
+def graph(+width: Nat, material: Chess.Material) -> Finite.Table(width, Solver.Node<width>):
+  graph_fill(width, width, material, Finite.keys(width))
 
-def initial(depth: Nat, width: Nat, material: Chess.Material,
-  keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
-  Engine.fill(~LayerContext, ~entry, depth, width, 0n, Initial{material}, keys)
-
-def layer(depth: Nat, width: Nat, material: Chess.Material,
-  previous: Finite.Table(width, Game.Outcome),
-  keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
-  Engine.fill(~LayerContext, ~entry, depth, width, 0n, Next{material, previous}, keys)
-
-def Context(width: Nat, low: Nat) -> Data:
-  Chess.Material
-
-def boundary(+width: Nat, +low: Nat, material: Chess.Material) -> Finite.Table(width, Game.Outcome):
-  initial(width, width, material, Finite.keys(width))
-
-def sweep(+width: Nat, +low: Nat, material: Chess.Material,
-  previous: Finite.Table(width, Game.Outcome)) -> Finite.Table(width, Game.Outcome):
-  layer(width, width, material, previous, Finite.keys(width))
-
-def generate(remaining: Nat, width: Nat, material: Chess.Material) -> Finite.Table(width, Game.Outcome):
-  Engine.generate(~Context, ~boundary, ~sweep, remaining, width, 0n, material)
+def generate(remaining: Nat, +width: Nat, material: Chess.Material) -> Finite.Table(width, Game.Outcome):
+  Solver.generate(remaining, width, graph(width, material))
 
 # Compatibility projections shared by the existing serialization proofs.
 def bytes(depth: Nat, table: Finite.Table(depth, Game.Outcome)) -> Finite.Table(depth, U32):

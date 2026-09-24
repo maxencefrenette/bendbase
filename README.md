@@ -52,10 +52,12 @@ independent and their full correctness laws are unchanged.
 
 ## Shared generation engine
 
-`src/table_engine.bend` owns parallel indexed table filling, reversible-clock
-iteration, best-outcome folding, and byte conversion. Pawnless three-man, KPK,
-and pawnless four-man generators are adapters to this engine. Templates
-specialize their entry callbacks; no reusable runtime closures are needed.
+`src/clock_solver.bend` now owns the actual reversible-clock solver used by
+pawnless three-man, KPK, and pawnless four-man generation. Each compiles a
+component graph with terminal nodes, quiet edges (same-table keys), and reset
+edges (completed dependency outcomes). The solver has no material-family cases.
+`src/table_engine.bend` supplies parallel indexed filling, WDL folding and byte
+conversion; it no longer contains a separate clock iteration implementation.
 `src/table_engine_proof.bend` proves indexed filling and byte conversion once,
 by structural induction, and the adapters reuse those results in their WDL proofs.
 
@@ -63,8 +65,14 @@ Adapters retain their move rules, indexing, and dependency scheduling. Captures
 read completed lower-material tables. KPK solves ranks nearest promotion first,
 so pawn pushes and promotions read completed tables at a fresh clock, while quiet
 moves read the previous clock layer. Its final rank selection also uses the
-shared indexed fill. This is shared execution machinery, not yet a unified
-material-independent solver: adapters still own successor lookup and scheduling.
+shared indexed fill. Structural compilation proofs connect each graph to the
+existing chess semantics, preserving all end-to-end WDL laws. The component
+solver also has a general serialized-byte/strategy theorem independent of
+material. Graphs are currently held in memory: this avoids regenerating moves
+at every clock but increases memory use; no performance claim is made.
+
+This completes consolidation of clock solving, not the whole chess pipeline.
+Graph builders still own legacy move rules, indexing and dependency scheduling.
 Pawnful four-man byte lists still use the game evaluator.
 
 ### Toward an N-men solver
@@ -80,12 +88,18 @@ injectivity for arbitrary piece counts, without enumerating positions.
 `src/position_legacy.bend` supplies proved lossless three-/four-man board
 conversions and position-preserving embeddings for pawnless tables and KPK.
 
-These are the representation foundations, not an N-men chess-correctness claim.
-They do not yet replace the existing generators or file layouts. The next stage
-is common legal moves and clock-reset/dependency handling over this representation,
-followed by migrating the generators and their WDL proofs. No speed or compactness
-claim is made for this internal index; stored roots will exclude EP rights even
-though continuation states retain them.
+`src/chess.bend` implements common move rules over these positions: arbitrary
+piece lists, all promotions, double pushes, captures and en passant. Move
+enumeration is proved complete and sound, and successors preserve validity.
+It also supplies terminal detection and a common clock-reset predicate.
+
+The remaining work is to prove conversion of the legacy move rules into this
+common representation and replace the material-specific dependency schedules.
+The common move module is not yet used by the file generators. Its move proofs
+and the component solver theorem are NOT a completed N-men chess WDL proof.
+Existing file formats remain unchanged. No speed or compactness claim is made
+for the new internal index; stored roots will exclude EP rights even though
+continuation states retain them.
 
 ## Generate pawnless four-man tables
 

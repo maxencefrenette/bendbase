@@ -8,7 +8,8 @@ import ./four_index_proof.bend as FourIndexProof
 import ./material_chess.bend as Chess
 import ./four_chess.bend as Rules
 import ./pawnless_generator.bend as Gen
-import ./table_engine_proof.bend as EngineProof
+import ./clock_solver.bend as Solver
+import ./clock_solver_proof.bend as SolverProof
 import ./pawnless_cache_shape.bend as Shape
 import ./finite_table.bend as Finite
 import ./finite_table_proof.bend as FiniteProof
@@ -35,21 +36,104 @@ def combine_correct(+node: Rules.View, +values: List<&2, Game.Outcome>, +trees: 
     Equal.cong(List<&2, Game.Outcome>, Game.Outcome, xs => Gen.combine(node, xs),
       values, Lemmas.outcomes(trees), correct), assemble_evaluate(node, trees))
 
-def fill_get(depth: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope, +layer: Gen.Layer<width>,
-  +lower: Maybe<&2, Gen.Bundle<low>>, +moves: Nat, +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
-  {Finite.get(depth, Game.Outcome, key, Gen.fill(depth, width, low, scope, layer, lower, moves, keys)) ==
-   Gen.at(width, low, scope, layer, lower, moves, Gen.decode(width, scope, Finite.get(depth, Word(width), key, keys))) : Game.Outcome}:
-  EngineProof.fill_get(~Gen.LayerContext, ~Gen.entry, depth, width, low,
-    Gen.EntryContext{Gen.Config{scope, lower, moves}, layer}, keys, key)
+def graph_get(depth: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope,
+  +moves: Nat, +lower: Maybe<&2, Gen.Bundle<low>>, +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
+  {Finite.get(depth, Solver.Node<width>, key, Gen.graph_fill(depth, width, low, scope, moves, lower, keys)) ==
+   Gen.node(width, low, scope, lower, Rules.view(moves, Gen.decode(width, scope, Finite.get(depth, Word(width), key, keys)))) : Solver.Node<width>}:
+  match depth keys key:
+    case 0n word WNil{}:
+      {==}
+    case 1n+rest Finite.Fork{left, right} WCon{False{}, tail}:
+      graph_get(rest, width, low, scope, moves, lower, left, tail)
+    case 1n+rest Finite.Fork{left, right} WCon{True{}, tail}:
+      graph_get(rest, width, low, scope, moves, lower, right, tail)
 
-def fill_lookup(+width: Nat, +low: Nat, +scope: Gen.Scope, +layer: Gen.Layer<width>,
-  +lower: Maybe<&2, Gen.Bundle<low>>, +moves: Nat, +key: Word(width)) ->
-  {Finite.get(width, Game.Outcome, key, Gen.fill(width, width, low, scope, layer, lower, moves, Finite.keys(width))) ==
-   Gen.at(width, low, scope, layer, lower, moves, Gen.decode(width, scope, key)) : Game.Outcome}:
+def graph_lookup(+width: Nat, +low: Nat, +scope: Gen.Scope,
+  +moves: Nat, +lower: Maybe<&2, Gen.Bundle<low>>, +key: Word(width)) ->
+  {Finite.get(width, Solver.Node<width>, key, Gen.graph(width, low, scope, moves, lower)) ==
+   Gen.node(width, low, scope, lower, Rules.view(moves, Gen.decode(width, scope, key))) : Solver.Node<width>}:
   %FiniteProof.keys_get(width, key) :
-    {Finite.get(width, Game.Outcome, key, Gen.fill(width, width, low, scope, layer, lower, moves, Finite.keys(width))) ==
-     Gen.at(width, low, scope, layer, lower, moves, Gen.decode(width, scope, _)) : Game.Outcome}
-  fill_get(width, width, low, scope, layer, lower, moves, Finite.keys(width), key)
+    {Finite.get(width, Solver.Node<width>, key, Gen.graph(width, low, scope, moves, lower)) ==
+     Gen.node(width, low, scope, lower, Rules.view(moves, Gen.decode(width, scope, _))) : Solver.Node<width>}
+  graph_get(width, width, low, scope, moves, lower, Finite.keys(width), key)
+
+def edge_values(positions: List<&2, Chess.Position>, +width: Nat, +low: Nat, +scope: Gen.Scope,
+  +previous: Finite.Table(width, Game.Outcome), +lower: Maybe<&2, Gen.Bundle<low>>) ->
+  {Solver.values(width, Gen.edges(positions, width, low, scope, lower), previous) ==
+   Gen.values(positions, width, low, scope, previous, lower) : List<&2, Game.Outcome>}:
+  match positions:
+    case Nil{}:
+      {==}
+    case head <> +tail:
+      +value = Gen.lookup(width, low, scope, previous, lower, head)
+      Equal.cong(List<&2, Game.Outcome>, List<&2, Game.Outcome>, rest => value <> rest,
+        Solver.values(width, Gen.edges(tail, width, low, scope, lower), previous),
+        Gen.values(tail, width, low, scope, previous, lower),
+        edge_values(tail, width, low, scope, previous, lower))
+
+def compiled_combine(+width: Nat, +low: Nat, +scope: Gen.Scope, +lower: Maybe<&2, Gen.Bundle<low>>,
+  +view: Rules.View, +values: List<&2, Game.Outcome>) ->
+  {Solver.combine(width, Gen.node(width, low, scope, lower, view), values) == Gen.combine(view, values) : Game.Outcome}:
+  match view values:
+    case Rules.Stop{result} _:
+      {==}
+    case Rules.Play{turn, children} Nil{}:
+      {==}
+    case Rules.Play{turn, children} head <> tail:
+      {==}
+
+def compiled_boundary(+width: Nat, +low: Nat, +scope: Gen.Scope, +lower: Maybe<&2, Gen.Bundle<low>>, +view: Rules.View) ->
+  {Solver.boundary(width, Gen.node(width, low, scope, lower, view)) == Game.evaluate(Rules.boundary(view)) : Game.Outcome}:
+  match view:
+    case Rules.Stop{result}:
+      {==}
+    case Rules.Play{turn, children}:
+      {==}
+
+def compiled_step(+width: Nat, +low: Nat, +scope: Gen.Scope, +previous: Finite.Table(width, Game.Outcome),
+  +lower: Maybe<&2, Gen.Bundle<low>>, +view: Rules.View) ->
+  {Solver.at(width, Solver.Next{previous}, Gen.node(width, low, scope, lower, view)) ==
+   Gen.combine(view, Gen.values(Rules.children(view), width, low, scope, previous, lower)) : Game.Outcome}:
+  match view:
+    case Rules.Stop{result}:
+      {==}
+    case Rules.Play{turn, +children}:
+      Equal.trans(Game.Outcome,
+        Solver.at(width, Solver.Next{previous}, Gen.node(width, low, scope, lower, view)),
+        Solver.combine(width, Gen.node(width, low, scope, lower, view), Gen.values(children, width, low, scope, previous, lower)),
+        Gen.combine(view, Gen.values(children, width, low, scope, previous, lower)),
+        Equal.cong(List<&2, Game.Outcome>, Game.Outcome, values => Solver.combine(width, Gen.node(width, low, scope, lower, view), values),
+          Solver.values(width, Gen.edges(children, width, low, scope, lower), previous), Gen.values(children, width, low, scope, previous, lower),
+          edge_values(children, width, low, scope, previous, lower)),
+        compiled_combine(width, low, scope, lower, view, Gen.values(children, width, low, scope, previous, lower)))
+
+def compiled_at(+width: Nat, +low: Nat, +scope: Gen.Scope, +phase: Solver.Layer<width>,
+  +lower: Maybe<&2, Gen.Bundle<low>>, +moves: Nat, +position: Chess.Position) ->
+  {Solver.at(width, phase, Gen.node(width, low, scope, lower, Rules.view(moves, position))) ==
+   Gen.at(width, low, scope, phase, lower, moves, position) : Game.Outcome}:
+  match phase:
+    case Solver.Initial{}:
+      compiled_boundary(width, low, scope, lower, Rules.view(moves, position))
+    case Solver.Next{previous}:
+      compiled_step(width, low, scope, previous, lower, Rules.view(moves, position))
+
+def layer_at(+width: Nat, +low: Nat, +scope: Gen.Scope, +phase: Solver.Layer<width>,
+  +lower: Maybe<&2, Gen.Bundle<low>>, +moves: Nat, +key: Word(width)) ->
+  {Finite.get(width, Game.Outcome, key, Solver.layer(width, Gen.graph(width, low, scope, moves, lower), phase)) ==
+   Gen.at(width, low, scope, phase, lower, moves, Gen.decode(width, scope, key)) : Game.Outcome}:
+  +graph = Gen.graph(width, low, scope, moves, lower)
+  +position = Gen.decode(width, scope, key)
+  +node = Gen.node(width, low, scope, lower, Rules.view(moves, position))
+  Equal.trans(Game.Outcome,
+    Finite.get(width, Game.Outcome, key, Solver.layer(width, graph, phase)),
+    Solver.at(width, phase, node), Gen.at(width, low, scope, phase, lower, moves, position),
+    Equal.trans(Game.Outcome,
+      Finite.get(width, Game.Outcome, key, Solver.layer(width, graph, phase)),
+      Solver.at(width, phase, Finite.get(width, Solver.Node<width>, key, graph)), Solver.at(width, phase, node),
+      SolverProof.lookup(width, graph, phase, key),
+      Equal.cong(Solver.Node<width>, Game.Outcome, n => Solver.at(width, phase, n),
+        Finite.get(width, Solver.Node<width>, key, graph), node, graph_lookup(width, low, scope, moves, lower, key))),
+    compiled_at(width, low, scope, phase, lower, moves, position))
 
 def generated_get(+remaining: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope,
   +moves: Nat, +lower: Maybe<&2, Gen.Bundle<low>>, +key: Word(width)) ->
@@ -57,9 +141,9 @@ def generated_get(+remaining: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope,
    Gen.at(width, low, scope, Gen.phase(remaining, width, low, scope, moves, lower), lower, moves, Gen.decode(width, scope, key)) : Game.Outcome}:
   match remaining:
     case 0n:
-      fill_lookup(width, low, scope, Gen.Initial{}, lower, moves, key)
+      layer_at(width, low, scope, Solver.Initial{}, lower, moves, key)
     case 1n+rest:
-      fill_lookup(width, low, scope, Gen.Next{Gen.generate(rest, width, low, scope, moves, lower)}, lower, moves, key)
+      layer_at(width, low, scope, Solver.Next{Gen.generate(rest, width, low, scope, moves, lower)}, lower, moves, key)
 
 def generated_at(+remaining: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope,
   +moves: Nat, +lower: Maybe<&2, Gen.Bundle<low>>, +key: Word(width), +position: Chess.Position,

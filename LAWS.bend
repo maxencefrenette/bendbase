@@ -19,6 +19,57 @@ import ./src/pawnless_generator.bend as PawnlessGenerator
 import ./src/position.bend as Position
 import ./src/position_index.bend as PositionIndex
 import ./src/position_legacy.bend as PositionLegacy
+import ./src/chess.bend as CommonChess
+import ./src/clock_solver.bend as ClockSolver
+
+# Common move specification: arbitrary lists of Q/R/B/N/pawns, two kings,
+# no castling. Pawns advance in their owner's direction; double pushes need
+# the starting rank and two empty squares; promotion offers all four kinds.
+# EP removes the pawn behind the target, expires on every other move, and
+# includes post-capture king safety. Asserted rights require a valid double-
+# push predecessor. These laws certify enumeration against those move rules,
+# not yet equivalence with every legacy chess module or N-men WDL generation.
+law common_legal_moves_are_complete:
+  for +width: Nat
+  for format: {width == 14n : Nat}
+  for +position: Position.Position
+  for +move: CommonChess.Action
+  for legal: Game.Truth(CommonChess.legal(position, move))
+  CommonChess.Member(CommonChess.after(position, move), CommonChess.successors(width, position))
+
+law common_legal_moves_are_sound:
+  for +width: Nat
+  for +position: Position.Position
+  for +next: Position.Position
+  for member: CommonChess.Member(next, CommonChess.successors(width, position))
+  CommonChess.LegalSuccessor(width, position, next)
+
+law common_successors_preserve_validity:
+  for +width: Nat
+  for +position: Position.Position
+  for +next: Position.Position
+  for member: CommonChess.Member(next, CommonChess.successors(width, position))
+  Game.Truth(CommonChess.valid(next))
+
+# A component theorem, not a substitute for chess integration: terminal nodes
+# must encode mate/stalemate/dead positions; quiet edges must index the same
+# component; reset edges must contain proven outcomes of earlier dependencies
+# at clock zero. The clock solver has no material-specific branches. The law
+# below proves its serialized result against the supplied component game.
+# Establishing the graph/dependency obligations for chess remains separate.
+law common_clock_component_wdl_is_correct:
+  for +remaining: Nat
+  for +width: Nat
+  for +graph: Finite.Table(width, ClockSolver.Node<width>)
+  for +key: Word(width)
+  Game.CorrectByte(ClockSolver.tree(remaining, width, graph, key),
+    Finite.read(ClockSolver.file(remaining, width, graph), Finite.offset(width, key)))
+
+law common_clock_component_file_has_exact_length:
+  for +remaining: Nat
+  for +width: Nat
+  for +graph: Finite.Table(width, ClockSolver.Node<width>)
+  {List.length(&2, U32, ClockSolver.file(remaining, width, graph)) == Finite.size(width) : Nat}
 
 # N-men consolidation foundation. n counts non-king pieces. Material fixes
 # ordered piece kinds (including pawns) and relative owners; boards carry

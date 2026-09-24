@@ -7,32 +7,88 @@ import ./finite_table.bend as Finite
 import ./finite_table_proof.bend as FiniteProof
 import ./pawnless_tables.bend as Tables
 import ./table_engine_proof.bend as EngineProof
+import ./clock_solver.bend as Solver
 
-def initial_get(depth: Nat, +width: Nat, +material: Chess.Material,
+def graph_get(depth: Nat, +width: Nat, +material: Chess.Material,
   +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
-  {Finite.get(depth, Game.Outcome, key, Tables.initial(depth, width, material, keys)) ==
-   Tables.base(width, material, Finite.get(depth, Word(width), key, keys)) : Game.Outcome}:
-  EngineProof.fill_get(~Tables.LayerContext, ~Tables.entry, depth, width, 0n, Tables.Initial{material}, keys, key)
+  {Finite.get(depth, Solver.Node<width>, key, Tables.graph_fill(depth, width, material, keys)) ==
+   Tables.node(width, Chess.view(material, Chess.Three{Index.decode_at(width, Finite.get(depth, Word(width), key, keys))})) : Solver.Node<width>}:
+  match depth keys key:
+    case 0n word WNil{}:
+      {==}
+    case 1n+rest Finite.Fork{left, right} WCon{False{}, tail}:
+      graph_get(rest, width, material, left, tail)
+    case 1n+rest Finite.Fork{left, right} WCon{True{}, tail}:
+      graph_get(rest, width, material, right, tail)
 
-def layer_get(depth: Nat, +width: Nat, +material: Chess.Material,
-  +previous: Finite.Table(width, Game.Outcome),
-  +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
-  {Finite.get(depth, Game.Outcome, key, Tables.layer(depth, width, material, previous, keys)) ==
-   Tables.step(width, material, previous, Finite.get(depth, Word(width), key, keys)) : Game.Outcome}:
-  EngineProof.fill_get(~Tables.LayerContext, ~Tables.entry, depth, width, 0n, Tables.Next{material, previous}, keys, key)
+def graph_lookup(+width: Nat, +material: Chess.Material, +key: Word(width)) ->
+  {Finite.get(width, Solver.Node<width>, key, Tables.graph(width, material)) ==
+   Tables.node(width, Chess.view(material, Chess.Three{Index.decode_at(width, key)})) : Solver.Node<width>}:
+  %FiniteProof.keys_get(width, key) :
+    {Finite.get(width, Solver.Node<width>, key, Tables.graph(width, material)) ==
+     Tables.node(width, Chess.view(material, Chess.Three{Index.decode_at(width, _)})) : Solver.Node<width>}
+  graph_get(width, width, material, Finite.keys(width), key)
 
-def initial_lookup(+width: Nat, +material: Chess.Material, +keys: Finite.Table(width, Word(width)), +key: Word(width),
-  canonical: {Finite.get(width, Word(width), key, keys) == key : Word(width)}) ->
-  {Finite.get(width, Game.Outcome, key, Tables.initial(width, width, material, keys)) == Tables.base(width, material, key) : Game.Outcome}:
-  %canonical : {Finite.get(width, Game.Outcome, key, Tables.initial(width, width, material, keys)) == Tables.base(width, material, _) : Game.Outcome}
-  initial_get(width, width, material, keys, key)
+def layer_lookup(+width: Nat, +material: Chess.Material, +phase: Solver.Layer<width>, +key: Word(width)) ->
+  {Finite.get(width, Game.Outcome, key, Solver.layer(width, Tables.graph(width, material), phase)) ==
+   Solver.at(width, phase, Tables.node(width, Chess.view(material, Chess.Three{Index.decode_at(width, key)}))) : Game.Outcome}:
+  %graph_lookup(width, material, key) :
+    {Finite.get(width, Game.Outcome, key, Solver.layer(width, Tables.graph(width, material), phase)) ==
+     Solver.at(width, phase, _) : Game.Outcome}
+  %FiniteProof.keys_get(width, key) :
+    {Finite.get(width, Game.Outcome, key, Solver.layer(width, Tables.graph(width, material), phase)) ==
+     Solver.at(width, phase, Finite.get(width, Solver.Node<width>, _, Tables.graph(width, material))) : Game.Outcome}
+  EngineProof.fill_get(~Solver.Family, ~Solver.entry, width, width, 0n,
+    Solver.Context{Tables.graph(width, material), phase}, Finite.keys(width), key)
 
-def layer_lookup(+width: Nat, +material: Chess.Material, +previous: Finite.Table(width, Game.Outcome),
-  +keys: Finite.Table(width, Word(width)), +key: Word(width),
-  canonical: {Finite.get(width, Word(width), key, keys) == key : Word(width)}) ->
-  {Finite.get(width, Game.Outcome, key, Tables.layer(width, width, material, previous, keys)) == Tables.step(width, material, previous, key) : Game.Outcome}:
-  %canonical : {Finite.get(width, Game.Outcome, key, Tables.layer(width, width, material, previous, keys)) == Tables.step(width, material, previous, _) : Game.Outcome}
-  layer_get(width, width, material, previous, keys, key)
+def compiled_boundary(+width: Nat, +view: Chess.View) ->
+  {Solver.boundary(width, Tables.node(width, view)) == Game.evaluate(Chess.boundary(view)) : Game.Outcome}:
+  match view:
+    case Chess.Stop{result}:
+      {==}
+    case Chess.Play{turn, children}:
+      {==}
+
+def edge_values(states: List<&2, Chess.State>, +width: Nat, +previous: Finite.Table(width, Game.Outcome)) ->
+  {Solver.values(width, Tables.edges(states, width), previous) == Tables.values(states, width, previous) : List<&2, Game.Outcome>}:
+  match states:
+    case Nil{}:
+      {==}
+    case Chess.KingsOnly{} <> +tail:
+      Equal.cong(List<&2, Game.Outcome>, List<&2, Game.Outcome>, rest => Game.Draw{} <> rest,
+        Solver.values(width, Tables.edges(tail, width), previous), Tables.values(tail, width, previous),
+        edge_values(tail, width, previous))
+    case Chess.Three{board} <> +tail:
+      +value = Finite.get(width, Game.Outcome, Index.encode_at(width, board), previous)
+      Equal.cong(List<&2, Game.Outcome>, List<&2, Game.Outcome>, rest => value <> rest,
+        Solver.values(width, Tables.edges(tail, width), previous), Tables.values(tail, width, previous),
+        edge_values(tail, width, previous))
+
+def compiled_combine(+width: Nat, +view: Chess.View, +values: List<&2, Game.Outcome>) ->
+  {Solver.combine(width, Tables.node(width, view), values) == Tables.combine(view, values) : Game.Outcome}:
+  match view values:
+    case Chess.Stop{result} _:
+      {==}
+    case Chess.Play{turn, children} Nil{}:
+      {==}
+    case Chess.Play{turn, children} head <> tail:
+      {==}
+
+def compiled_step(+width: Nat, +view: Chess.View, +previous: Finite.Table(width, Game.Outcome)) ->
+  {Solver.at(width, Solver.Next{previous}, Tables.node(width, view)) ==
+   Tables.combine(view, Tables.values(Chess.children(view), width, previous)) : Game.Outcome}:
+  match view:
+    case Chess.Stop{result}:
+      {==}
+    case Chess.Play{turn, +children}:
+      Equal.trans(Game.Outcome,
+        Solver.at(width, Solver.Next{previous}, Tables.node(width, view)),
+        Solver.combine(width, Tables.node(width, view), Tables.values(children, width, previous)),
+        Tables.combine(view, Tables.values(children, width, previous)),
+        Equal.cong(List<&2, Game.Outcome>, Game.Outcome, values => Solver.combine(width, Tables.node(width, view), values),
+          Solver.values(width, Tables.edges(children, width), previous), Tables.values(children, width, previous),
+          edge_values(children, width, previous)),
+        compiled_combine(width, view, Tables.values(children, width, previous)))
 
 def lookup_base(+width: Nat, +size: {width == 20n : Nat}, +material: Chess.Material, +board: Chess.Board) ->
   {Finite.get(width, Game.Outcome, Index.encode_at(width, board), Tables.generate(0n, width, material)) ==
@@ -40,7 +96,12 @@ def lookup_base(+width: Nat, +size: {width == 20n : Nat}, +material: Chess.Mater
   %IndexProof.roundtrip_at(width, size, board) :
     {Finite.get(width, Game.Outcome, Index.encode_at(width, board), Tables.generate(0n, width, material)) ==
      Game.evaluate(Chess.boundary(Chess.view(material, Chess.Three{_}))) : Game.Outcome}
-  initial_lookup(width, material, Finite.keys(width), Index.encode_at(width, board), FiniteProof.keys_get(width, Index.encode_at(width, board)))
+  Equal.trans(Game.Outcome,
+    Finite.get(width, Game.Outcome, Index.encode_at(width, board), Tables.generate(0n, width, material)),
+    Solver.boundary(width, Tables.node(width, Chess.view(material, Chess.Three{Index.decode_at(width, Index.encode_at(width, board))}))),
+    Tables.base(width, material, Index.encode_at(width, board)),
+    layer_lookup(width, material, Solver.Initial{}, Index.encode_at(width, board)),
+    compiled_boundary(width, Chess.view(material, Chess.Three{Index.decode_at(width, Index.encode_at(width, board))})))
 
 def lookup_step(+remaining: Nat, +width: Nat, +size: {width == 20n : Nat}, +material: Chess.Material, +board: Chess.Board) ->
   {Finite.get(width, Game.Outcome, Index.encode_at(width, board), Tables.generate(1n+remaining, width, material)) ==
@@ -49,7 +110,14 @@ def lookup_step(+remaining: Nat, +width: Nat, +size: {width == 20n : Nat}, +mate
   %IndexProof.roundtrip_at(width, size, board) :
     {Finite.get(width, Game.Outcome, Index.encode_at(width, board), Tables.generate(1n+remaining, width, material)) ==
      Tables.at(width, material, Tables.generate(remaining, width, material), _) : Game.Outcome}
-  layer_lookup(width, material, Tables.generate(remaining, width, material), Finite.keys(width), Index.encode_at(width, board), FiniteProof.keys_get(width, Index.encode_at(width, board)))
+  Equal.trans(Game.Outcome,
+    Finite.get(width, Game.Outcome, Index.encode_at(width, board), Tables.generate(1n+remaining, width, material)),
+    Solver.at(width, Solver.Next{Tables.generate(remaining, width, material)},
+      Tables.node(width, Chess.view(material, Chess.Three{Index.decode_at(width, Index.encode_at(width, board))}))),
+    Tables.at(width, material, Tables.generate(remaining, width, material), Index.decode_at(width, Index.encode_at(width, board))),
+    layer_lookup(width, material, Solver.Next{Tables.generate(remaining, width, material)}, Index.encode_at(width, board)),
+    compiled_step(width, Chess.view(material, Chess.Three{Index.decode_at(width, Index.encode_at(width, board))}),
+      Tables.generate(remaining, width, material)))
 
 def outcomes(trees: List<&2, Game.Tree>) -> List<&2, Game.Outcome>:
   match trees:
