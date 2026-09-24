@@ -1,5 +1,8 @@
 import Base
 import ./LAWS.bend as Laws
+import ./src/chess_laws.bend as ChessLaws
+import ./src/cache_laws.bend as CacheLaws
+import ./src/legacy_laws.bend as LegacyLaws
 import ./src/game.bend as Game
 import ./src/game_proof.bend as GameProof
 import ./src/pawnless_chess.bend as Chess
@@ -65,141 +68,141 @@ def Laws.common_generated_file_has_exact_length(name, limit):
 def Laws.common_legal_lines_have_finite_bound(moves, limit, remaining, board, legal):
   CommonGameProof.line_bound(moves, limit, remaining, board, legal)
 
-def Laws.common_correct_cache_extends(expected, count, capacity, entries, previous, old, current):
+def CacheLaws.common_correct_cache_extends(expected, count, capacity, entries, previous, old, current):
   CacheInvariantProof.extend(~expected, count, capacity, entries, previous, old, current)
 
-def Laws.common_invariant_supplies_correct_resets(expected, width, count, capacity, stages, anchor, board, move, correct, legal, resets, bounded, material):
+def CacheLaws.common_invariant_supplies_correct_resets(expected, width, count, capacity, stages, anchor, board, move, correct, legal, resets, bounded, material):
   CacheInvariantProof.reset_edge(~expected, width, count, capacity, stages, anchor, board, move, correct, legal, resets, bounded, material)
 
-def Laws.common_generated_cache_invariant(expected, limit, sound, count, capacity, result, success):
+def CacheLaws.common_generated_cache_invariant(expected, limit, sound, count, capacity, result, success):
   GeneratedInvariant.generated(~expected, ~limit, ~sound, count, capacity, result, success)
 
-def Laws.common_scheduled_chess_nodes_compile(C, solve, actions, count, capacity, context, anchor, board, bounded, material):
+def CacheLaws.common_scheduled_chess_nodes_compile(C, solve, actions, count, capacity, context, anchor, board, bounded, material):
   CompileTotal.node(~C, ~solve, actions, count, capacity, context, anchor, board, bounded, material)
 
-def Laws.common_compiler_preserves_node_backup(width, stages, node, previous):
+def CacheLaws.common_compiler_preserves_node_backup(width, stages, node, previous):
   ChessSolverProof.node(width, stages, node, previous)
 
-def Laws.common_compiled_graph_has_exact_entries(name, stage, stages, graph, key, compiled):
+def CacheLaws.common_compiled_graph_has_exact_entries(name, stage, stages, graph, key, compiled):
   ChessSolverProof.graph(name, stage, stages, graph, key, compiled)
 
-def Laws.common_compiled_layer_preserves_entry_backup(name, stage, stages, graph, key, previous, compiled):
+def CacheLaws.common_compiled_layer_preserves_entry_backup(name, stage, stages, graph, key, previous, compiled):
   ChessSolverProof.layer(name, stage, stages, graph, key, previous, compiled)
 
-def Laws.common_component_solves_compiled_game(name, stage, limit, stages, graph, key, compiled):
+def CacheLaws.common_component_solves_compiled_game(name, stage, limit, stages, graph, key, compiled):
   ChessSolverProof.component(name, stage, limit, stages, graph, key, compiled)
 
-def Laws.common_material_directory_is_complete(C, solve, capacity, name, context, bounded):
+def CacheLaws.common_material_directory_is_complete(C, solve, capacity, name, context, bounded):
   MaterialDirectoryProof.build(~C, ~solve, capacity, name, context, bounded)
 
-def Laws.common_material_schedule_is_complete(C, solve, count, query, capacity, context, name, bounded, material):
+def CacheLaws.common_material_schedule_is_complete(C, solve, count, query, capacity, context, name, bounded, material):
   MaterialDirectoryProof.schedule(~C, ~solve, count, query, capacity, context, name, bounded, material)
 
-def Laws.common_scheduled_resets_always_resolve(C, solve, count, capacity, context, anchor, board, move, legal, reset, bounded, material):
+def CacheLaws.common_scheduled_resets_always_resolve(C, solve, count, capacity, context, anchor, board, move, legal, reset, bounded, material):
   MaterialDirectoryProof.reset_resolves(~C, ~solve, count, capacity, context, anchor, board, move, legal, reset, bounded, material)
 
-def Laws.common_reset_stage_is_scheduled(C, build, count, width, context, anchor, board, move, legal, reset, bounded):
+def CacheLaws.common_reset_stage_is_scheduled(C, build, count, width, context, anchor, board, move, legal, reset, bounded):
   ChessCacheProof.reset_directory(~C, ~build, count, width, context, anchor, board, move, legal, reset, bounded)
 
-def Laws.common_registered_reset_reads_exact_value(width, stages, n, material, key, directory, table, stage, entry):
+def CacheLaws.common_registered_reset_reads_exact_value(width, stages, n, material, key, directory, table, stage, entry):
   ChessCacheProof.reset_registered(width, stages, n, material, key, directory, table, stage, entry)
 
-def Laws.common_empty_reset_cache_is_failure(width, address):
+def CacheLaws.common_empty_reset_cache_is_failure(width, address):
   {==}
 
-def Laws.common_missing_reset_is_failure(width, stages, address, missing):
+def CacheLaws.common_missing_reset_is_failure(width, stages, address, missing):
   Equal.cong(Maybe<&2, Game.Outcome>, Maybe<&2, ClockSolver.Edge<width>>, value => ChessCache.reset_value(width, value),
     ChessCache.resolve(stages, address), None{}, missing)
 
-def Laws.common_address_preserves_component(anchor, board):
+def ChessLaws.common_address_preserves_component(anchor, board):
   ChessComponentProof.address_component(anchor, board)
 
-def Laws.common_legal_quiet_moves_preserve_material(anchor, board, move, legal, quiet):
+def ChessLaws.common_legal_quiet_moves_preserve_material(anchor, board, move, legal, quiet):
   ChessComponentProof.legal_material(anchor, board, move, legal, quiet)
 
-def Laws.common_quiet_routes_stay_in_component(anchor, board, move, legal, quiet):
+def ChessLaws.common_quiet_routes_stay_in_component(anchor, board, move, legal, quiet):
   ChessComponentProof.routed_component(anchor, board, move, legal, quiet)
 
-def Laws.common_quiet_routes_preserve_key_width(anchor, board, move, legal, quiet):
+def ChessLaws.common_quiet_routes_preserve_key_width(anchor, board, move, legal, quiet):
   ChessComponentProof.routed_width(anchor, board, move, legal, quiet)
 
-def Laws.common_pawn_geometry_decreases_distance(owner, from, dest, board, allowed):
+def ChessLaws.common_pawn_geometry_decreases_distance(owner, from, dest, board, allowed):
   MeasureProof.pawn_geometry(owner, from, dest, board, allowed)
 
-def Laws.common_move_update_respects_measure(pieces, from, dest, choice, ep, victim, progress):
+def ChessLaws.common_move_update_respects_measure(pieces, from, dest, choice, ep, victim, progress):
   MeasureProof.update(pieces, from, dest, choice, ep, victim, progress)
 
-def Laws.common_legal_resets_decrease_measure(board, move, legal, reset):
+def ChessLaws.common_legal_resets_decrease_measure(board, move, legal, reset):
   SelectionProof.legal_reset(board, move, legal, reset)
 
-def Laws.common_legal_quiet_moves_preserve_measure(board, move, legal, quiet):
+def ChessLaws.common_legal_quiet_moves_preserve_measure(board, move, legal, quiet):
   SelectionProof.legal_quiet(board, move, legal, quiet)
 
-def Laws.common_legal_continuations_decrease_budget(limit, remaining, board, move, legal):
+def ChessLaws.common_legal_continuations_decrease_budget(limit, remaining, board, move, legal):
   SelectionProof.legal_budget(limit, remaining, board, move, legal)
 
-def Laws.common_routed_continuations_decrease_budget(limit, remaining, anchor, board, move, legal):
+def ChessLaws.common_routed_continuations_decrease_budget(limit, remaining, anchor, board, move, legal):
   ChessGraphProof.route_budget(limit, remaining, anchor, board, move, legal)
 
-def Laws.component_stage_matching_is_exact(left, right, matches):
+def CacheLaws.component_stage_matching_is_exact(left, right, matches):
   ComponentCacheProof.equal_reflect(left, right, matches)
 
-def Laws.completed_component_resolves_common_address(index, n, material, key, table, tail):
+def CacheLaws.completed_component_resolves_common_address(index, n, material, key, table, tail):
   ComponentCacheProof.resolve_head(index, n, material, key, table, tail)
 
-def Laws.next_stage_does_not_shadow_previous_component(index, entries, tail, name):
+def CacheLaws.next_stage_does_not_shadow_previous_component(index, entries, tail, name):
   ComponentCacheProof.skip_next(index, entries, tail, name)
 
-def Laws.pawn_schedule_contains_only_completed_stages(count, width, limit, promotions):
+def CacheLaws.pawn_schedule_contains_only_completed_stages(count, width, limit, promotions):
   ComponentCacheProof.schedule_before(~PawnTables.Schedule, ~PawnTables.component,
     count, width, PawnTables.ScheduleContext{limit, promotions})
 
-def Laws.completed_stage_cache_has_no_current_stage(stages, current, earlier):
+def CacheLaws.completed_stage_cache_has_no_current_stage(stages, current, earlier):
   ComponentCacheProof.current_missing(stages, current, earlier)
 
-def Laws.material_signature_matching_is_exact(left, right, matches):
+def CacheLaws.material_signature_matching_is_exact(left, right, matches):
   MaterialCacheProof.reflect(left, right, matches)
 
-def Laws.material_cache_hit_has_matching_signature(entries, query, entry, found):
+def CacheLaws.material_cache_hit_has_matching_signature(entries, query, entry, found):
   MaterialCacheProof.find_sound(entries, query, entry, found)
 
-def Laws.material_cache_resolves_common_address(n, material, key, table, tail):
+def CacheLaws.material_cache_resolves_common_address(n, material, key, table, tail):
   MaterialCacheProof.resolve_head(n, material, key, table, tail)
 
-def Laws.material_cache_miss_is_explicit(query, width, key):
+def CacheLaws.material_cache_miss_is_explicit(query, width, key):
   {==}
 
-def Laws.completed_dependency_lookup_is_exact(width, key, table):
+def CacheLaws.completed_dependency_lookup_is_exact(width, key, table):
   TableCacheProof.exact(width, key, table)
 
-def Laws.successful_dependency_lookup_has_matching_width(stored_width, query_width, key, table, result, found):
+def CacheLaws.successful_dependency_lookup_has_matching_width(stored_width, query_width, key, table, result, found):
   TableCacheProof.width_matches(stored_width, query_width, key, table, result, found)
 
-def Laws.dependency_cache_returns_completed_value(A, value, cache):
+def CacheLaws.dependency_cache_returns_completed_value(A, value, cache):
   DependencyProof.lookup_head(A, value, cache)
 
-def Laws.dependency_cache_preserves_earlier_values(A, offset, value, cache):
+def CacheLaws.dependency_cache_preserves_earlier_values(A, offset, value, cache):
   DependencyProof.lookup_previous(A, offset, value, cache)
 
-def Laws.missing_dependency_is_explicit(A, offset):
+def CacheLaws.missing_dependency_is_explicit(A, offset):
   DependencyProof.lookup_missing(A, offset)
 
-def Laws.successor_addresses_are_lossless(anchor, position):
+def ChessLaws.successor_addresses_are_lossless(anchor, position):
   PositionAddressProof.roundtrip(anchor, position)
 
-def Laws.successor_addresses_cannot_alias_distinct_positions(left_anchor, right_anchor, left, right, same):
+def ChessLaws.successor_addresses_cannot_alias_distinct_positions(left_anchor, right_anchor, left, right, same):
   PositionAddressProof.injective(left_anchor, right_anchor, left, right, same)
 
-def Laws.common_graph_routes_to_actual_successor(anchor, position, move):
+def ChessLaws.common_graph_routes_to_actual_successor(anchor, position, move):
   ChessGraphProof.route_position(anchor, position, move)
 
-def Laws.common_graph_preserves_clock_reset(anchor, position, move):
+def ChessLaws.common_graph_preserves_clock_reset(anchor, position, move):
   ChessGraphProof.route_reset(anchor, position, move)
 
-def Laws.common_graph_applies_clock_policy(limit, remaining, anchor, position, move):
+def ChessLaws.common_graph_applies_clock_policy(limit, remaining, anchor, position, move):
   ChessGraphProof.route_clock(limit, remaining, anchor, position, move)
 
-def Laws.common_graph_preserves_all_moves_and_terminal_results(width, anchor, position):
+def ChessLaws.common_graph_preserves_all_moves_and_terminal_results(width, anchor, position):
   ChessGraphProof.node(width, anchor, position)
 
 def Laws.common_legal_moves_are_complete(width, format, position, move, legal):
@@ -211,7 +214,7 @@ def Laws.common_legal_moves_are_sound(width, position, next, member):
 def Laws.common_successors_preserve_validity(width, position, next, member):
   CommonMovesProof.successor_valid(width, position, next, member)
 
-def Laws.common_clock_component_wdl_is_correct(remaining, width, graph, key):
+def CacheLaws.common_clock_component_wdl_is_correct(remaining, width, graph, key):
   +game = ClockSolver.tree(remaining, width, graph, key)
   (Game.evaluate(game),
     (ClockSolverProof.serialized_value(remaining, width, graph, key),
@@ -219,40 +222,40 @@ def Laws.common_clock_component_wdl_is_correct(remaining, width, graph, key):
        (yes => GameProof.sound(game, player, yes),
         strategy => GameProof.complete(game, player, strategy))))
 
-def Laws.common_clock_component_file_has_exact_length(remaining, width, graph):
+def CacheLaws.common_clock_component_file_has_exact_length(remaining, width, graph):
   ClockSolverProof.file_length(remaining, width, graph)
 
-def Laws.general_position_index_roundtrip(n, board):
+def ChessLaws.general_position_index_roundtrip(n, board):
   PositionIndexProof.roundtrip(n, board)
 
-def Laws.general_position_index_is_injective(n, left, right, same):
+def ChessLaws.general_position_index_is_injective(n, left, right, same):
   PositionIndexProof.injective(n, left, right, same)
 
-def Laws.general_material_has_exact_piece_count(n, material, board, owner):
+def ChessLaws.general_material_has_exact_piece_count(n, material, board, owner):
   PositionIndexProof.men_count(n, material, board, owner)
 
-def Laws.three_man_embedding_is_lossless(board):
+def LegacyLaws.three_man_embedding_is_lossless(board):
   PositionLegacyProof.three_roundtrip(board)
 
-def Laws.four_man_embedding_is_lossless(board):
+def LegacyLaws.four_man_embedding_is_lossless(board):
   PositionLegacyProof.four_roundtrip(board)
 
-def Laws.three_man_embedding_preserves_position(kind, board):
+def LegacyLaws.three_man_embedding_preserves_position(kind, board):
   PositionLegacyProof.three_position(kind, board)
 
-def Laws.four_man_embedding_preserves_position(material, board):
+def LegacyLaws.four_man_embedding_preserves_position(material, board):
   PositionLegacyProof.four_position(material, board)
 
-def Laws.kpk_embedding_preserves_position(advance, position):
+def LegacyLaws.kpk_embedding_preserves_position(advance, position):
   PositionLegacyProof.kpk_position(advance, position)
 
-def Laws.legal_moves_are_complete(material, board, key, legal):
+def LegacyLaws.legal_moves_are_complete(material, board, key, legal):
   MovesProof.legal_present(material, board, key, legal)
 
-def Laws.legal_moves_are_sound(material, board, next, member):
+def LegacyLaws.legal_moves_are_sound(material, board, next, member):
   MovesProof.present_legal(material, board, next, member)
 
-def Laws.position_index_roundtrip(board):
+def LegacyLaws.position_index_roundtrip(board):
   IndexProof.decode_encode(board)
 
 def Laws.generated_wdl_is_fully_correct(remaining, horizon, width, format, material, board, valid):
@@ -266,10 +269,10 @@ def Laws.generated_wdl_is_fully_correct(remaining, horizon, width, format, mater
 def Laws.generated_file_has_exact_length(remaining, width, material):
   TablesProof.file_length(remaining, width, material)
 
-def Laws.pawn_legal_moves_are_complete(advance, position, key, legal):
+def LegacyLaws.pawn_legal_moves_are_complete(advance, position, key, legal):
   PawnMovesProof.legal_present(advance, position, key, legal)
 
-def Laws.pawn_legal_moves_are_sound(advance, position, next, member):
+def LegacyLaws.pawn_legal_moves_are_sound(advance, position, next, member):
   PawnMovesProof.present_legal(advance, position, next, member)
 
 def Laws.generated_kpk_wdl_is_fully_correct(limit, horizon, width, format, board, valid):
@@ -283,37 +286,37 @@ def Laws.generated_kpk_wdl_is_fully_correct(limit, horizon, width, format, board
 def Laws.generated_kpk_file_has_exact_length(limit, width):
   PawnTablesProof.file_length(limit, width)
 
-def Laws.material_moves_are_complete(width, format, board, move, legal):
+def LegacyLaws.material_moves_are_complete(width, format, board, move, legal):
   MaterialProof.every_action(width, format, board, move, legal)
 
-def Laws.material_moves_are_sound(width, board, next, member):
+def LegacyLaws.material_moves_are_sound(width, board, next, member):
   MaterialProof.present_legal(width, board, next, member)
 
-def Laws.material_successors_are_valid(width, board, next, member):
+def LegacyLaws.material_successors_are_valid(width, board, next, member):
   MaterialProof.successor_valid(width, board, next, member)
 
-def Laws.material_three_man_roundtrip(material, board):
+def LegacyLaws.material_three_man_roundtrip(material, board):
   MaterialProof.three_roundtrip(material, board)
 
-def Laws.material_moves_do_not_increase_count(capacity, board, move, bounded):
+def LegacyLaws.material_moves_do_not_increase_count(capacity, board, move, bounded):
   CountProof.after_bounded(capacity, board, move, bounded)
 
-def Laws.material_captures_reduce_count(capacity, board, move, bounded, captured):
+def LegacyLaws.material_captures_reduce_count(capacity, board, move, bounded, captured):
   CountProof.after_captured(capacity, board, move, bounded, captured)
 
-def Laws.material_quiet_moves_preserve_count(board, move, quiet):
+def LegacyLaws.material_quiet_moves_preserve_count(board, move, quiet):
   CountProof.after_quiet(board, move, quiet)
 
-def Laws.four_position_index_roundtrip(board):
+def LegacyLaws.four_position_index_roundtrip(board):
   FourIndexProof.roundtrip(board)
 
-def Laws.one_pawn_moves_are_complete(width, format, advance, board, move, legal):
+def LegacyLaws.one_pawn_moves_are_complete(width, format, advance, board, move, legal):
   OnePawnMovesProof.every_action(width, format, advance, board, move, legal)
 
-def Laws.one_pawn_moves_are_sound(width, advance, board, next, member):
+def LegacyLaws.one_pawn_moves_are_sound(width, advance, board, next, member):
   OnePawnMovesProof.present_legal(width, advance, board, next, member)
 
-def Laws.one_pawn_successors_are_safe(width, advance, board, next, member):
+def LegacyLaws.one_pawn_successors_are_safe(width, advance, board, next, member):
   OnePawnMovesProof.successor_safe(width, advance, board, next, member)
 
 def Laws.one_pawn_four_wdl_is_fully_correct(limit, horizon, moves, actions, other_moves, other_actions, width, format, profile, board, valid):
@@ -327,13 +330,13 @@ def Laws.one_pawn_four_wdl_is_fully_correct(limit, horizon, moves, actions, othe
 def Laws.one_pawn_four_file_has_exact_length(width, limit, moves, other_moves, profile):
   OnePawnProof.file_length(width, limit, moves, other_moves, profile)
 
-def Laws.two_pawn_moves_are_complete(width, format, a, b, board, move, legal):
+def LegacyLaws.two_pawn_moves_are_complete(width, format, a, b, board, move, legal):
   TwoPawnMovesProof.every_action(width, format, a, b, board, move, legal)
 
-def Laws.two_pawn_moves_are_sound(width, a, b, board, next, member):
+def LegacyLaws.two_pawn_moves_are_sound(width, a, b, board, next, member):
   TwoPawnMovesProof.present_legal(width, a, b, board, next, member)
 
-def Laws.two_pawn_successors_are_safe(width, a, b, board, next, member):
+def LegacyLaws.two_pawn_successors_are_safe(width, a, b, board, next, member):
   TwoPawnMovesProof.successor_safe(width, a, b, board, next, member)
 
 def Laws.two_pawn_four_wdl_is_fully_correct(limit, horizon, moves, actions, other_moves, other_actions, width, format, profile, board, valid):

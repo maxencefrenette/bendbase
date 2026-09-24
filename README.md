@@ -21,6 +21,12 @@ The proof is structural and does not enumerate chess positions. The current
 checker run takes about 1.6 seconds on this container. The comments in
 [LAWS.bend](LAWS.bend) document the theorem's scope and execution boundary.
 
+`LAWS.bend` keeps the public chess rules and end-to-end WDL guarantees.
+Supporting statements live in [chess laws](src/chess_laws.bend),
+[cache laws](src/cache_laws.bend), and [legacy laws](src/legacy_laws.bend).
+`PROOF.bend` imports and proves all four modules; this organization does not
+exclude any supporting obligation from the single proof-check command.
+
 ## Complete common-generator proof
 
 `src/chess_tables.bend` is the correctness-first generator for arbitrary ordered
