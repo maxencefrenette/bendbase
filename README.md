@@ -124,8 +124,14 @@ this includes capture/pawn-move clock resets, promotions, and en passant.
 the ordered material signature, including relative ownership, and that their
 actual routed addresses stay in the same material/measure component with the
 same key width. This establishes quiet-component closure without enumerating
-positions. Reset dependency-cache coverage, component compilation, and the
-global WDL composition are still pending.
+positions. `src/chess_cache.bend` derives reset stages directly from destination
+positions and produces shared clock-solver reset edges, retaining explicit
+failure for missing dependencies. Its proof establishes that every legal reset
+finds its stage in a sufficiently completed schedule, for any component builder,
+and that a registered exact-width material table returns its exact stored value.
+This proves stage coverage, not material-directory completeness or correctness
+of those stored WDL values. Material coverage, full component compilation, and
+the global WDL composition are still pending.
 A material signature alone does not identify a rank-specific component; the
 common measure is not yet wired into production stage selection.
 Pawnful four-man byte lists still use the game evaluator.

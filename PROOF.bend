@@ -38,6 +38,21 @@ import ./src/pawn_tables.bend as PawnTables
 import ./src/chess_measure_proof.bend as MeasureProof
 import ./src/chess_selection_proof.bend as SelectionProof
 import ./src/chess_component_proof.bend as ChessComponentProof
+import ./src/chess_cache_proof.bend as ChessCacheProof
+import ./src/chess_cache.bend as ChessCache
+
+def Laws.common_reset_stage_is_scheduled(C, build, count, width, context, anchor, board, move, legal, reset, bounded):
+  ChessCacheProof.reset_directory(~C, ~build, count, width, context, anchor, board, move, legal, reset, bounded)
+
+def Laws.common_registered_reset_reads_exact_value(width, stages, n, material, key, directory, table, stage, entry):
+  ChessCacheProof.reset_registered(width, stages, n, material, key, directory, table, stage, entry)
+
+def Laws.common_empty_reset_cache_is_failure(width, address):
+  {==}
+
+def Laws.common_missing_reset_is_failure(width, stages, address, missing):
+  Equal.cong(Maybe<&2, Game.Outcome>, Maybe<&2, ClockSolver.Edge<width>>, value => ChessCache.reset_value(width, value),
+    ChessCache.resolve(stages, address), None{}, missing)
 
 def Laws.common_address_preserves_component(anchor, board):
   ChessComponentProof.address_component(anchor, board)

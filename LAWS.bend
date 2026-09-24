@@ -29,12 +29,60 @@ import ./src/material_cache.bend as MaterialCache
 import ./src/component_cache.bend as Components
 import ./src/chess_measure.bend as Measure
 import ./src/chess_component.bend as ChessComponent
+import ./src/chess_cache.bend as ChessCache
+
+# Reset resolution derives its stage from the destination, never a family
+# offset. The scheduler really contains each earlier positive stage. The
+# table-read theorem is conditional on registration of the exact material
+# and width: material-directory completeness and semantic WDL correctness
+# still require the common component builder/induction. None is NOT a draw.
+law common_reset_stage_is_scheduled:
+  for ~C: Nat -> Data
+  for ~build: @+stage: Nat -> @+width: Nat -> C(width) -> List<&2, Components.Stage> -> List<&2, MaterialCache.Named>
+  for +count: Nat
+  for +width: Nat
+  for +context: C(width)
+  for +anchor: Game.Player
+  for +board: Position.Position
+  for +move: CommonChess.Action
+  for legal: Game.Truth(CommonChess.legal(board, move))
+  for reset: Game.Truth(CommonChess.resets(board, move))
+  for bounded: Measure.Le(Measure.position(board), 1n+count)
+  exs directory: List<&2, MaterialCache.Named>
+  {Components.find(Components.schedule(~C, ~build, count, width, context),
+    Measure.position(PositionAddress.position(ChessGraph.address(ChessGraph.route(anchor, board, move))))) ==
+    Some{directory} : Maybe<&2, List<&2, MaterialCache.Named>>}
+
+law common_registered_reset_reads_exact_value:
+  for +width: Nat
+  for +stages: List<&2, Components.Stage>
+  for +n: Nat
+  for +material: Position.Material(n)
+  for +key: Word(PositionIndex.width(n))
+  for +directory: List<&2, MaterialCache.Named>
+  for +table: Finite.Table(PositionIndex.width(n), Game.Outcome)
+  for stage: {Components.find(stages, Measure.position(PositionAddress.position(PositionAddress.Address{n, material, key}))) == Some{directory} : Maybe<&2, List<&2, MaterialCache.Named>>}
+  for entry: {MaterialCache.find(directory, MaterialCache.signature(n, material)) == Some{TableCache.Entry{PositionIndex.width(n), table}} : Maybe<&2, TableCache.Entry>}
+  {ChessCache.reset(width, stages, PositionAddress.Address{n, material, key}) ==
+    Some{ClockSolver.Reset{Finite.get(PositionIndex.width(n), Game.Outcome, key, table)}} : Maybe<&2, ClockSolver.Edge<width>>}
+
+law common_empty_reset_cache_is_failure:
+  for +width: Nat
+  for +address: PositionAddress.Address
+  {ChessCache.reset(width, Nil{}, address) == None{} : Maybe<&2, ClockSolver.Edge<width>>}
+
+law common_missing_reset_is_failure:
+  for +width: Nat
+  for +stages: List<&2, Components.Stage>
+  for +address: PositionAddress.Address
+  for missing: {ChessCache.resolve(stages, address) == None{} : Maybe<&2, Game.Outcome>}
+  {ChessCache.reset(width, stages, address) == None{} : Maybe<&2, ClockSolver.Edge<width>>}
 
 # Quiet moves preserve the full ordered cache signature (owners AND kinds),
 # not just the number of pieces. Their actual routed addresses therefore stay
 # in the current material/measure component, with exactly the same key width.
-# This establishes quiet-component closure; it does not yet establish coverage
-# or correctness of the earlier components needed by reset lookups.
+# This establishes quiet-component closure; it does not yet establish material
+# coverage or correctness of the earlier components needed by reset lookups.
 law common_address_preserves_component:
   for +anchor: Game.Player
   for +board: Position.Position
