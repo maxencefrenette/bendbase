@@ -9,6 +9,7 @@ import ./finite_table_proof.bend as FiniteProof
 import ./pawnless_tables.bend as Pawnless
 import ./pawnless_tables_proof.bend as PawnlessProof
 import ./pawn_tables.bend as Tables
+import ./table_engine_proof.bend as EngineProof
 
 def position_square(+owner: Game.Player, +turn: Game.Player, +wk: Word(6n), +bk: Word(6n),
   +rank: Word(3n), +file: Word(3n)) ->
@@ -28,13 +29,7 @@ def layer_get(depth: Nat, +width: Nat, +step: Tables.Layer<width>,
   +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
   {Finite.get(depth, Game.Outcome, key, Tables.layer(depth, width, step, keys)) ==
    Tables.at(width, step, Pawn.position(Index.decode_at(width, Finite.get(depth, Word(width), key, keys)))) : Game.Outcome}:
-  match depth keys key:
-    case 0n word WNil{}:
-      {==}
-    case 1n+rest Finite.Fork{left, right} WCon{False{}, tail}:
-      layer_get(rest, width, step, left, tail)
-    case 1n+rest Finite.Fork{left, right} WCon{True{}, tail}:
-      layer_get(rest, width, step, right, tail)
+  EngineProof.fill_get(~Tables.LayerContext, ~Tables.entry, depth, width, 0n, step, keys, key)
 
 def layer_lookup(+width: Nat, +step: Tables.Layer<width>, +key: Word(width)) ->
   {Finite.get(width, Game.Outcome, key, Tables.layer(width, width, step, Finite.keys(width))) ==
@@ -491,13 +486,7 @@ def finish_get(depth: Nat, +width: Nat, +ranks: Tables.Ranks<width>,
   {Finite.get(depth, Game.Outcome, key, Tables.finish(depth, width, ranks, keys)) ==
    Tables.stored(Pawn.advance(Index.decode_at(width, Finite.get(depth, Word(width), key, keys))), width, ranks,
      Finite.get(depth, Word(width), key, keys)) : Game.Outcome}:
-  match depth keys key:
-    case 0n word WNil{}:
-      {==}
-    case 1n+rest Finite.Fork{left, right} WCon{False{}, tail}:
-      finish_get(rest, width, ranks, left, tail)
-    case 1n+rest Finite.Fork{left, right} WCon{True{}, tail}:
-      finish_get(rest, width, ranks, right, tail)
+  EngineProof.fill_get(~Tables.RankContext, ~Tables.stored_entry, depth, width, 0n, ranks, keys, key)
 
 def finish_lookup(+width: Nat, +ranks: Tables.Ranks<width>, +key: Word(width)) ->
   {Finite.get(width, Game.Outcome, key, Tables.finish(width, width, ranks, Finite.keys(width))) ==

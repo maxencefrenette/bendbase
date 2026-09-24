@@ -6,31 +6,20 @@ import ./pawnless_index_proof.bend as IndexProof
 import ./finite_table.bend as Finite
 import ./finite_table_proof.bend as FiniteProof
 import ./pawnless_tables.bend as Tables
+import ./table_engine_proof.bend as EngineProof
 
 def initial_get(depth: Nat, +width: Nat, +material: Chess.Material,
   +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
   {Finite.get(depth, Game.Outcome, key, Tables.initial(depth, width, material, keys)) ==
    Tables.base(width, material, Finite.get(depth, Word(width), key, keys)) : Game.Outcome}:
-  match depth keys key:
-    case 0n word WNil{}:
-      {==}
-    case 1n+rest Finite.Fork{left, right} WCon{False{}, tail}:
-      initial_get(rest, width, material, left, tail)
-    case 1n+rest Finite.Fork{left, right} WCon{True{}, tail}:
-      initial_get(rest, width, material, right, tail)
+  EngineProof.fill_get(~Tables.LayerContext, ~Tables.entry, depth, width, 0n, Tables.Initial{material}, keys, key)
 
 def layer_get(depth: Nat, +width: Nat, +material: Chess.Material,
   +previous: Finite.Table(width, Game.Outcome),
   +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
   {Finite.get(depth, Game.Outcome, key, Tables.layer(depth, width, material, previous, keys)) ==
    Tables.step(width, material, previous, Finite.get(depth, Word(width), key, keys)) : Game.Outcome}:
-  match depth keys key:
-    case 0n word WNil{}:
-      {==}
-    case 1n+rest Finite.Fork{left, right} WCon{False{}, tail}:
-      layer_get(rest, width, material, previous, left, tail)
-    case 1n+rest Finite.Fork{left, right} WCon{True{}, tail}:
-      layer_get(rest, width, material, previous, right, tail)
+  EngineProof.fill_get(~Tables.LayerContext, ~Tables.entry, depth, width, 0n, Tables.Next{material, previous}, keys, key)
 
 def initial_lookup(+width: Nat, +material: Chess.Material, +keys: Finite.Table(width, Word(width)), +key: Word(width),
   canonical: {Finite.get(width, Word(width), key, keys) == key : Word(width)}) ->
@@ -180,13 +169,7 @@ def pointwise(+remaining: Nat, +width: Nat, +size: {width == 20n : Nat}, +materi
 def bytes_get(depth: Nat, +table: Finite.Table(depth, Game.Outcome), +key: Word(depth)) ->
   {Finite.get(depth, U32, key, Tables.bytes(depth, table)) ==
    Game.byte(Finite.get(depth, Game.Outcome, key, table)) : U32}:
-  match depth table key:
-    case 0n outcome WNil{}:
-      {==}
-    case 1n+rest Finite.Fork{left, right} WCon{False{}, tail}:
-      bytes_get(rest, left, tail)
-    case 1n+rest Finite.Fork{left, right} WCon{True{}, tail}:
-      bytes_get(rest, right, tail)
+  EngineProof.bytes_get(depth, table, key)
 
 def serialized_value(+remaining: Nat, +width: Nat, +size: {width == 20n : Nat},
   +material: Chess.Material, +board: Chess.Board) ->

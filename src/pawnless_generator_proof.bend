@@ -8,6 +8,7 @@ import ./four_index_proof.bend as FourIndexProof
 import ./material_chess.bend as Chess
 import ./four_chess.bend as Rules
 import ./pawnless_generator.bend as Gen
+import ./table_engine_proof.bend as EngineProof
 import ./pawnless_cache_shape.bend as Shape
 import ./finite_table.bend as Finite
 import ./finite_table_proof.bend as FiniteProof
@@ -38,13 +39,8 @@ def fill_get(depth: Nat, +width: Nat, +low: Nat, +scope: Gen.Scope, +layer: Gen.
   +lower: Maybe<&2, Gen.Bundle<low>>, +moves: Nat, +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
   {Finite.get(depth, Game.Outcome, key, Gen.fill(depth, width, low, scope, layer, lower, moves, keys)) ==
    Gen.at(width, low, scope, layer, lower, moves, Gen.decode(width, scope, Finite.get(depth, Word(width), key, keys))) : Game.Outcome}:
-  match depth keys key:
-    case 0n word WNil{}:
-      {==}
-    case 1n+rest Finite.Fork{left, right} WCon{False{}, tail}:
-      fill_get(rest, width, low, scope, layer, lower, moves, left, tail)
-    case 1n+rest Finite.Fork{left, right} WCon{True{}, tail}:
-      fill_get(rest, width, low, scope, layer, lower, moves, right, tail)
+  EngineProof.fill_get(~Gen.LayerContext, ~Gen.entry, depth, width, low,
+    Gen.EntryContext{Gen.Config{scope, lower, moves}, layer}, keys, key)
 
 def fill_lookup(+width: Nat, +low: Nat, +scope: Gen.Scope, +layer: Gen.Layer<width>,
   +lower: Maybe<&2, Gen.Bundle<low>>, +moves: Nat, +key: Word(width)) ->

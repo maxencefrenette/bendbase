@@ -3,6 +3,7 @@ import ./game.bend as Game
 import ./pawnless_chess.bend as Chess
 import ./pawnless_index.bend as Index
 import ./finite_table.bend as Finite
+import ./table_engine.bend as Engine
 
 def values(states: List<&2, Chess.State>, +width: Nat,
   +table: Finite.Table(width, Game.Outcome)) -> List<&2, Game.Outcome>:
@@ -15,11 +16,7 @@ def values(states: List<&2, Chess.State>, +width: Nat,
       Finite.get(width, Game.Outcome, Index.encode_at(width, board), table) <> values(tail, width, table)
 
 def fold(rest: List<&2, Game.Outcome>, +turn: Game.Player, first: Game.Outcome) -> Game.Outcome:
-  match rest:
-    case Nil{}:
-      first
-    case head <> tail:
-      Game.best(turn, first, fold(tail, turn, head))
+  Engine.fold(rest, turn, first)
 
 def combine(view: Chess.View, outcomes: List<&2, Game.Outcome>) -> Game.Outcome:
   match view outcomes:
@@ -40,38 +37,47 @@ def at(+width: Nat, material: Chess.Material, previous: Finite.Table(width, Game
 def step(+width: Nat, material: Chess.Material, previous: Finite.Table(width, Game.Outcome), key: Word(width)) -> Game.Outcome:
   at(width, material, previous, Index.decode_at(width, key))
 
-def initial(depth: Nat, +width: Nat, +material: Chess.Material,
-  keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
-  match depth keys:
-    case 0n key:
+# The adapter supplies chess-specific entries; traversal and clock iteration
+# belong to Engine. These small projections are also used by the chess proof.
+type Layer<-width: Nat> is Data:
+  Initial{material: Chess.Material}
+  Next{material: Chess.Material, previous: Finite.Table(width, Game.Outcome)}
+
+def LayerContext(width: Nat, low: Nat) -> Data:
+  Layer<width>
+
+def entry(+width: Nat, +low: Nat, context: Layer<width>, key: Word(width)) -> Game.Outcome:
+  match context:
+    case Initial{material}:
       base(width, material, key)
-    case 1n++rest Finite.Fork{left, right}:
-      a b = initial(rest, width, material, left) initial(rest, width, material, right)
-      Finite.Fork{a, b}
-
-def layer(depth: Nat, +width: Nat, +material: Chess.Material,
-  +previous: Finite.Table(width, Game.Outcome),
-  keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
-  match depth keys:
-    case 0n key:
+    case Next{material, previous}:
       step(width, material, previous, key)
-    case 1n++rest Finite.Fork{left, right}:
-      a b = layer(rest, width, material, previous, left) layer(rest, width, material, previous, right)
-      Finite.Fork{a, b}
 
-def generate(remaining: Nat, +width: Nat, +material: Chess.Material) -> Finite.Table(width, Game.Outcome):
-  match remaining:
-    case 0n:
-      initial(width, width, material, Finite.keys(width))
-    case 1n+rest:
-      layer(width, width, material, generate(rest, width, material), Finite.keys(width))
+def initial(depth: Nat, width: Nat, material: Chess.Material,
+  keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
+  Engine.fill(~LayerContext, ~entry, depth, width, 0n, Initial{material}, keys)
 
+def layer(depth: Nat, width: Nat, material: Chess.Material,
+  previous: Finite.Table(width, Game.Outcome),
+  keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
+  Engine.fill(~LayerContext, ~entry, depth, width, 0n, Next{material, previous}, keys)
+
+def Context(width: Nat, low: Nat) -> Data:
+  Chess.Material
+
+def boundary(+width: Nat, +low: Nat, material: Chess.Material) -> Finite.Table(width, Game.Outcome):
+  initial(width, width, material, Finite.keys(width))
+
+def sweep(+width: Nat, +low: Nat, material: Chess.Material,
+  previous: Finite.Table(width, Game.Outcome)) -> Finite.Table(width, Game.Outcome):
+  layer(width, width, material, previous, Finite.keys(width))
+
+def generate(remaining: Nat, width: Nat, material: Chess.Material) -> Finite.Table(width, Game.Outcome):
+  Engine.generate(~Context, ~boundary, ~sweep, remaining, width, 0n, material)
+
+# Compatibility projections shared by the existing serialization proofs.
 def bytes(depth: Nat, table: Finite.Table(depth, Game.Outcome)) -> Finite.Table(depth, U32):
-  match depth table:
-    case 0n outcome:
-      Game.byte(outcome)
-    case 1n++rest Finite.Fork{left, right}:
-      Finite.Fork{bytes(rest, left), bytes(rest, right)}
+  Engine.bytes(depth, table)
 
 def file(remaining: Nat, +width: Nat, material: Chess.Material) -> List<&2, U32>:
   Finite.flatten(width, bytes(width, generate(remaining, width, material)))

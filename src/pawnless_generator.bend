@@ -6,7 +6,7 @@ import ./four_index.bend as FourIndex
 import ./material_chess.bend as Chess
 import ./four_chess.bend as Rules
 import ./finite_table.bend as Finite
-import ./pawnless_tables.bend as Bytes
+import ./table_engine.bend as Engine
 
 # Clock-layer dynamic programming over the SAME generalized move rules as
 # the chess semantics. No recursive game evaluation occurs in a layer.
@@ -74,7 +74,7 @@ def combine(view: Rules.View, values: List<&2, Game.Outcome>) -> Game.Outcome:
     case Rules.Play{turn, children} Nil{}:
       Game.Draw{}
     case Rules.Play{turn, children} head <> tail:
-      Bytes.fold(tail, turn, head)
+      Engine.fold(tail, turn, head)
 
 def at(+width: Nat, +low: Nat, +scope: Scope, layer: Layer<width>, lower: Maybe<&2, Bundle<low>>,
   moves: Nat, position: Chess.Position) -> Game.Outcome:
@@ -85,28 +85,39 @@ def at(+width: Nat, +low: Nat, +scope: Scope, layer: Layer<width>, lower: Maybe<
       +node = Rules.view(moves, position)
       combine(node, values(Rules.children(node), width, low, scope, previous, lower))
 
-def fill(depth: Nat, +width: Nat, +low: Nat, +scope: Scope, +layer: Layer<width>,
-  +lower: Maybe<&2, Bundle<low>>, +moves: Nat, keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
-  match depth keys:
-    case 0n key:
+type Config<-low: Nat> is Data:
+  Config{scope: Scope, lower: Maybe<&2, Bundle<low>>, moves: Nat}
+
+type EntryContext<-width: Nat, -low: Nat> is Data:
+  EntryContext{config: Config<low>, layer: Layer<width>}
+
+def LayerContext(width: Nat, low: Nat) -> Data:
+  EntryContext<width, low>
+
+def entry(+width: Nat, +low: Nat, context: EntryContext<width, low>, key: Word(width)) -> Game.Outcome:
+  match context:
+    case EntryContext{Config{+scope, lower, moves}, layer}:
       at(width, low, scope, layer, lower, moves, decode(width, scope, key))
-    case 1n++rest Finite.Fork{left, right}:
-      a b = fill(rest, width, low, scope, layer, lower, moves, left) fill(rest, width, low, scope, layer, lower, moves, right)
-      Finite.Fork{a, b}
 
-# Only the preceding reversible-clock layer and immutable capture dependencies
-# are retained. Captures never read the preceding four-man clock layer.
-def iterate(remaining: Nat, +width: Nat, +low: Nat, +scope: Scope, +moves: Nat,
-  +lower: Maybe<&2, Bundle<low>>, +keys: Finite.Table(width, Word(width))) -> Finite.Table(width, Game.Outcome):
-  match remaining:
-    case 0n:
-      fill(width, width, low, scope, Initial{}, lower, moves, keys)
-    case 1n+rest:
-      fill(width, width, low, scope, Next{iterate(rest, width, low, scope, moves, lower, keys)}, lower, moves, keys)
+def fill(depth: Nat, width: Nat, low: Nat, scope: Scope, layer: Layer<width>,
+  lower: Maybe<&2, Bundle<low>>, moves: Nat, keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
+  Engine.fill(~LayerContext, ~entry, depth, width, low, EntryContext{Config{scope, lower, moves}, layer}, keys)
 
-def generate(remaining: Nat, +width: Nat, low: Nat, scope: Scope, moves: Nat,
+def Context(width: Nat, low: Nat) -> Data:
+  Config<low>
+
+def boundary(+width: Nat, +low: Nat, config: Config<low>) -> Finite.Table(width, Game.Outcome):
+  Engine.fill(~LayerContext, ~entry, width, width, low, EntryContext{config, Initial{}}, Finite.keys(width))
+
+def sweep(+width: Nat, +low: Nat, config: Config<low>,
+  previous: Finite.Table(width, Game.Outcome)) -> Finite.Table(width, Game.Outcome):
+  Engine.fill(~LayerContext, ~entry, width, width, low, EntryContext{config, Next{previous}}, Finite.keys(width))
+
+# Captures consult immutable lower-material dependencies, not the previous
+# four-man clock layer. The shared engine owns the reversible-clock iteration.
+def generate(remaining: Nat, width: Nat, low: Nat, scope: Scope, moves: Nat,
   lower: Maybe<&2, Bundle<low>>) -> Finite.Table(width, Game.Outcome):
-  iterate(remaining, width, low, scope, moves, lower, Finite.keys(width))
+  Engine.generate(~Context, ~boundary, ~sweep, remaining, width, low, Config{scope, lower, moves})
 
 def phase(remaining: Nat, +width: Nat, +low: Nat, +scope: Scope, +moves: Nat,
   +lower: Maybe<&2, Bundle<low>>) -> Layer<width>:
@@ -125,7 +136,7 @@ def four(+limit: Nat, width: Nat, +low: Nat, +moves: Nat, material: FourIndex.Ma
   generate(limit, width, low, Double{material}, moves, Some{singles(limit, low, moves)})
 
 def file_with(limit: Nat, +width: Nat, low: Nat, moves: Nat, material: FourIndex.Material, lower: Bundle<low>) -> List<&2, U32>:
-  Finite.flatten(width, Bytes.bytes(width, generate(limit, width, low, Double{material}, moves, Some{lower})))
+  Finite.flatten(width, Engine.bytes(width, generate(limit, width, low, Double{material}, moves, Some{lower})))
 
 def file(+limit: Nat, +width: Nat, +low: Nat, +moves: Nat, material: FourIndex.Material) -> List<&2, U32>:
   file_with(limit, width, low, moves, material, singles(limit, low, moves))

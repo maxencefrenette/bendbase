@@ -4,6 +4,7 @@ import ./pawnless_chess.bend as Chess
 import ./pawn_chess.bend as Pawn
 import ./pawnless_index.bend as Index
 import ./finite_table.bend as Finite
+import ./table_engine.bend as Engine
 import ./pawnless_tables.bend as Pawnless
 
 # Every rank is solved at all clocks before the next rank starts. A pawn push
@@ -99,7 +100,7 @@ def combine(view: Pawn.View, outcomes: List<&2, Game.Outcome>) -> Game.Outcome:
     case Pawn.Play{turn, edges} Nil{}:
       Game.Draw{}
     case Pawn.Play{turn, edges} head <> tail:
-      Pawnless.fold(tail, turn, head)
+      Engine.fold(tail, turn, head)
 
 type Layer<-width: Nat> is Data:
   Boundary{advance: Nat}
@@ -117,24 +118,37 @@ def at(+width: Nat, layer: Layer<width>, position: Pawn.Position) -> Game.Outcom
       +node = Pawn.view(1n+prior, position)
       combine(node, values(Pawn.tasks(node), 1n+prior, width, sources))
 
-def layer(depth: Nat, +width: Nat, +step: Layer<width>,
-  keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
-  match depth keys:
-    case 0n key:
-      at(width, step, Pawn.position(Index.decode_at(width, key)))
-    case 1n++rest Finite.Fork{left, right}:
-      a b = layer(rest, width, step, left) layer(rest, width, step, right)
-      Finite.Fork{a, b}
+def LayerContext(width: Nat, low: Nat) -> Data:
+  Layer<width>
 
-def clock(remaining: Nat, +advance: Nat, +width: Nat,
-  +lower: Ranks<width>, +promotions: Promotions<width>) -> Finite.Table(width, Game.Outcome):
-  match remaining:
-    case 0n:
+def entry(+width: Nat, +low: Nat, step: Layer<width>, key: Word(width)) -> Game.Outcome:
+  at(width, step, Pawn.position(Index.decode_at(width, key)))
+
+def layer(depth: Nat, width: Nat, step: Layer<width>,
+  keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
+  Engine.fill(~LayerContext, ~entry, depth, width, 0n, step, keys)
+
+type Dependencies<-width: Nat> is Data:
+  Dependencies{advance: Nat, lower: Ranks<width>, promotions: Promotions<width>}
+
+def Context(width: Nat, low: Nat) -> Data:
+  Dependencies<width>
+
+def boundary(+width: Nat, +low: Nat, context: Dependencies<width>) -> Finite.Table(width, Game.Outcome):
+  match context:
+    case Dependencies{advance, lower, promotions}:
       layer(width, width, Boundary{advance}, Finite.keys(width))
-    case 1n+rest:
-      layer(width, width,
-        Step{advance, Sources{clock(rest, advance, width, lower, promotions),
-          top(width, lower), top(width, earlier(width, lower)), promotions}}, Finite.keys(width))
+
+def sweep(+width: Nat, +low: Nat, context: Dependencies<width>,
+  previous: Finite.Table(width, Game.Outcome)) -> Finite.Table(width, Game.Outcome):
+  match context:
+    case Dependencies{advance, +lower, promotions}:
+      layer(width, width, Step{advance, Sources{previous,
+        top(width, lower), top(width, earlier(width, lower)), promotions}}, Finite.keys(width))
+
+def clock(remaining: Nat, advance: Nat, width: Nat,
+  lower: Ranks<width>, promotions: Promotions<width>) -> Finite.Table(width, Game.Outcome):
+  Engine.generate(~Context, ~boundary, ~sweep, remaining, width, 0n, Dependencies{advance, lower, promotions})
 
 def history(advance: Nat, +width: Nat, +limit: Nat, +promotions: Promotions<width>) -> Ranks<width>:
   match advance:
@@ -170,17 +184,19 @@ def stored(advance: Nat, +width: Nat, ranks: Ranks<width>, key: Word(width)) -> 
     case 1n+prior:
       Finite.get(width, Game.Outcome, key, select(Nat.sub(5n, prior), width, ranks))
 
-def finish(depth: Nat, +width: Nat, +ranks: Ranks<width>,
+def RankContext(width: Nat, low: Nat) -> Data:
+  Ranks<width>
+
+def stored_entry(+width: Nat, +low: Nat, ranks: Ranks<width>, key: Word(width)) -> Game.Outcome:
+  +word = key
+  stored(Pawn.advance(Index.decode_at(width, word)), width, ranks, word)
+
+def finish(depth: Nat, width: Nat, ranks: Ranks<width>,
   keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
-  match depth keys:
-    case 0n +key:
-      stored(Pawn.advance(Index.decode_at(width, key)), width, ranks, key)
-    case 1n++rest Finite.Fork{left, right}:
-      a b = finish(rest, width, ranks, left) finish(rest, width, ranks, right)
-      Finite.Fork{a, b}
+  Engine.fill(~RankContext, ~stored_entry, depth, width, 0n, ranks, keys)
 
 def generate(+limit: Nat, +width: Nat) -> Finite.Table(width, Game.Outcome):
   finish(width, width, history(6n, width, limit, promotions(limit, width)), Finite.keys(width))
 
 def file(limit: Nat, +width: Nat) -> List<&2, U32>:
-  Finite.flatten(width, Pawnless.bytes(width, generate(limit, width)))
+  Finite.flatten(width, Engine.bytes(width, generate(limit, width)))

@@ -46,8 +46,25 @@ Invalid placements are outside the WDL theorem's domain.
 No four-man tables have been generated during development, and `main.bend`
 still generates only the five three-man files. There is no separate four-man
 reference solver: `four_chess.bend` defines the rules/game tree, and the generator
-is proved correct against that specification. Existing three-man generators
-and proofs are intact.
+is proved correct against that specification. Three-man and pawnless four-man
+generation share the engine described below; their chess specifications remain
+independent and their full correctness laws are unchanged.
+
+## Shared generation engine
+
+`src/table_engine.bend` owns parallel indexed table filling, reversible-clock
+iteration, best-outcome folding, and byte conversion. Pawnless three-man, KPK,
+and pawnless four-man generators are adapters to this engine. Templates
+specialize their entry callbacks; no reusable runtime closures are needed.
+`src/table_engine_proof.bend` proves indexed filling and byte conversion once,
+by structural induction, and the adapters reuse those results in their WDL proofs.
+
+Adapters retain their move rules, indexing, and dependency scheduling. Captures
+read completed lower-material tables. KPK solves ranks nearest promotion first,
+so pawn pushes and promotions read completed tables at a fresh clock, while quiet
+moves read the previous clock layer. Its final rank selection also uses the
+shared indexed fill. The pawnful four-man generator is the next extension;
+its current byte lists still use the game evaluator.
 
 ## Generate pawnless four-man tables
 
