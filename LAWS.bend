@@ -21,6 +21,55 @@ import ./src/position_index.bend as PositionIndex
 import ./src/position_legacy.bend as PositionLegacy
 import ./src/chess.bend as CommonChess
 import ./src/clock_solver.bend as ClockSolver
+import ./src/position_address.bend as PositionAddress
+import ./src/chess_graph.bend as ChessGraph
+
+# Uniform graph construction, before dependency resolution. Each successor
+# carries its resulting material and lossless position key, including EP.
+# These statements quantify over arbitrary lists, not just three/four men.
+# They do not assume that a dependency cache is populated or correctly ordered.
+law successor_addresses_are_lossless:
+  for +anchor: Game.Player
+  for +position: Position.Position
+  {PositionAddress.position(PositionAddress.of_position(anchor, position)) == position : Position.Position}
+
+law successor_addresses_cannot_alias_distinct_positions:
+  for +left_anchor: Game.Player
+  for +right_anchor: Game.Player
+  for +left: Position.Position
+  for +right: Position.Position
+  for same: {PositionAddress.of_position(left_anchor, left) == PositionAddress.of_position(right_anchor, right) : PositionAddress.Address}
+  {left == right : Position.Position}
+
+law common_graph_routes_to_actual_successor:
+  for +anchor: Game.Player
+  for +position: Position.Position
+  for +move: CommonChess.Action
+  {PositionAddress.position(ChessGraph.address(ChessGraph.route(anchor, position, move))) ==
+   CommonChess.after(position, move) : Position.Position}
+
+law common_graph_preserves_clock_reset:
+  for +anchor: Game.Player
+  for +position: Position.Position
+  for +move: CommonChess.Action
+  {ChessGraph.resets(ChessGraph.route(anchor, position, move)) == CommonChess.resets(position, move) : Bool}
+
+# Used only when taking a move from a live node with remaining > 0. Terminal
+# detection, including the clock-zero draw, happens before edge traversal.
+law common_graph_applies_clock_policy:
+  for +limit: Nat
+  for +remaining: Nat
+  for +anchor: Game.Player
+  for +position: Position.Position
+  for +move: CommonChess.Action
+  {ChessGraph.next_clock(limit, remaining, ChessGraph.route(anchor, position, move)) ==
+   Bool.pick(Nat, CommonChess.resets(position, move), limit, Nat.sub(remaining, 1n)) : Nat}
+
+law common_graph_preserves_all_moves_and_terminal_results:
+  for +width: Nat
+  for +anchor: Game.Player
+  for +position: Position.Position
+  {ChessGraph.view(ChessGraph.node(width, anchor, position)) == CommonChess.view(width, position) : CommonChess.View}
 
 # Common move specification: arbitrary lists of Q/R/B/N/pawns, two kings,
 # no castling. Pawns advance in their owner's direction; double pushes need

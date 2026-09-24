@@ -28,6 +28,26 @@ import ./src/position_legacy_proof.bend as PositionLegacyProof
 import ./src/chess_moves_proof.bend as CommonMovesProof
 import ./src/clock_solver.bend as ClockSolver
 import ./src/clock_solver_proof.bend as ClockSolverProof
+import ./src/position_address_proof.bend as PositionAddressProof
+import ./src/chess_graph_proof.bend as ChessGraphProof
+
+def Laws.successor_addresses_are_lossless(anchor, position):
+  PositionAddressProof.roundtrip(anchor, position)
+
+def Laws.successor_addresses_cannot_alias_distinct_positions(left_anchor, right_anchor, left, right, same):
+  PositionAddressProof.injective(left_anchor, right_anchor, left, right, same)
+
+def Laws.common_graph_routes_to_actual_successor(anchor, position, move):
+  ChessGraphProof.route_position(anchor, position, move)
+
+def Laws.common_graph_preserves_clock_reset(anchor, position, move):
+  ChessGraphProof.route_reset(anchor, position, move)
+
+def Laws.common_graph_applies_clock_policy(limit, remaining, anchor, position, move):
+  ChessGraphProof.route_clock(limit, remaining, anchor, position, move)
+
+def Laws.common_graph_preserves_all_moves_and_terminal_results(width, anchor, position):
+  ChessGraphProof.node(width, anchor, position)
 
 def Laws.common_legal_moves_are_complete(width, format, position, move, legal):
   CommonMovesProof.every_action(width, format, position, move, legal)

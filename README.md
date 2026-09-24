@@ -93,10 +93,19 @@ piece lists, all promotions, double pushes, captures and en passant. Move
 enumeration is proved complete and sound, and successors preserve validity.
 It also supplies terminal detection and a common clock-reset predicate.
 
-The remaining work is to prove conversion of the legacy move rules into this
-common representation and replace the material-specific dependency schedules.
-The common move module is not yet used by the file generators. Its move proofs
-and the component solver theorem are NOT a completed N-men chess WDL proof.
+`src/position_address.bend` derives a runtime-sized material signature and key
+from any common position, without a material-family switch. Its address round-trip
+and non-aliasing proofs cover arbitrary piece lists, promotions and EP state.
+`src/chess_graph.bend` builds unresolved quiet/reset edges with these addresses.
+A structural proof shows that decoding its graph preserves every successor and
+terminal result of the common chess rules; separate laws preserve the clock policy.
+Reset edges remain addresses until their dependencies are resolved, so a missing
+dependency cannot be mistaken for a draw at this stage.
+
+The remaining work is to resolve/cache these addresses under a proved dependency
+order, prove conversion of legacy move rules, and migrate the file generators.
+The common graph builder is not yet used by those generators. Its move/graph
+proofs and the component solver theorem are NOT a completed N-men chess WDL proof.
 Existing file formats remain unchanged. No speed or compactness claim is made
 for the new internal index; stored roots will exclude EP rights even though
 continuation states retain them.
