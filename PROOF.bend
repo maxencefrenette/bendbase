@@ -36,6 +36,7 @@ import ./src/material_cache_proof.bend as MaterialCacheProof
 import ./src/component_cache_proof.bend as ComponentCacheProof
 import ./src/pawn_tables.bend as PawnTables
 import ./src/chess_measure_proof.bend as MeasureProof
+import ./src/chess_selection_proof.bend as SelectionProof
 
 def Laws.common_pawn_geometry_decreases_distance(owner, from, dest, board, allowed):
   MeasureProof.pawn_geometry(owner, from, dest, board, allowed)
@@ -43,8 +44,17 @@ def Laws.common_pawn_geometry_decreases_distance(owner, from, dest, board, allow
 def Laws.common_move_update_respects_measure(pieces, from, dest, choice, ep, victim, progress):
   MeasureProof.update(pieces, from, dest, choice, ep, victim, progress)
 
-def Laws.common_resets_decrease_measure_given_pawn_progress(board, move, progress, reset):
-  MeasureProof.after_reset(board, move, progress, reset)
+def Laws.common_legal_resets_decrease_measure(board, move, legal, reset):
+  SelectionProof.legal_reset(board, move, legal, reset)
+
+def Laws.common_legal_quiet_moves_preserve_measure(board, move, legal, quiet):
+  SelectionProof.legal_quiet(board, move, legal, quiet)
+
+def Laws.common_legal_continuations_decrease_budget(limit, remaining, board, move, legal):
+  SelectionProof.legal_budget(limit, remaining, board, move, legal)
+
+def Laws.common_routed_continuations_decrease_budget(limit, remaining, anchor, board, move, legal):
+  ChessGraphProof.route_budget(limit, remaining, anchor, board, move, legal)
 
 def Laws.component_stage_matching_is_exact(left, right, matches):
   ComponentCacheProof.equal_reflect(left, right, matches)

@@ -281,3 +281,51 @@ def after_reset(+board: P.Position, +move: Chess.Action, progress: M.MoveProgres
           pawn => pawn_changes(pieces, turn, from, dest, en_passant, victim, pawn),
           capture => capture_changes(pieces, from, dest, en_passant, victim, capture)),
         update(pieces, from, dest, choice, en_passant, victim, progress))
+
+def add_zero(a: Nat) -> {Nat.add(a, 0n) == a : Nat}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+rest:
+      %add_zero(rest) : {1n+Nat.add(rest, 0n) == 1n+_ : Nat}
+      {==}
+
+def add_comm(+a: Nat, +b: Nat) -> {Nat.add(a, b) == Nat.add(b, a) : Nat}:
+  match a:
+    case 0n:
+      Equal.sym(Nat, Nat.add(b, 0n), b, add_zero(b))
+    case 1n+rest:
+      %Equal.sym(Nat, Nat.add(b, 1n+rest), 1n+Nat.add(b, rest), add_next(b, rest)) : {1n+Nat.add(rest, b) == _ : Nat}
+      %add_comm(rest, b) : {1n+Nat.add(rest, b) == 1n+_ : Nat}
+      {==}
+
+def mul_le(+a: Nat, +b: Nat, +factor: Nat, proof: M.Le(a, b)) -> M.Le(Nat.mul(a, factor), Nat.mul(b, factor)):
+  match a b:
+    case 0n b:
+      Unit{}
+    case 1n+rest 0n:
+      match proof:
+    case 1n+x 1n+y:
+      add(factor, factor, Nat.mul(x, factor), Nat.mul(y, factor), refl(factor), mul_le(x, y, factor, proof))
+
+def suffix(a: Nat, +b: Nat, +extra: Nat, proof: M.Le(a, b)) -> M.Le(a, Nat.add(b, extra)):
+  match a b:
+    case 0n b:
+      Unit{}
+    case 1n+rest 0n:
+      match proof:
+    case 1n+x 1n+y:
+      suffix(x, y, extra, proof)
+
+def reset_budget(+limit: Nat, +after: Nat, +before: Nat, +remaining: Nat, progress: M.Lt(after, before)) ->
+  M.Lt(M.budget(limit, after, limit), M.budget(limit, before, remaining)):
+  %add_comm(limit, Nat.mul(after, 1n+limit)) :
+    M.Le(1n+_, M.budget(limit, before, remaining))
+  suffix(1n+Nat.add(limit, Nat.mul(after, 1n+limit)), Nat.mul(before, 1n+limit), remaining,
+    mul_le(1n+after, before, 1n+limit, progress))
+
+def quiet_budget(+limit: Nat, +measure: Nat, +remaining: Nat) ->
+  M.Lt(M.budget(limit, measure, remaining), M.budget(limit, measure, 1n+remaining)):
+  %Equal.sym(Nat, Nat.add(Nat.mul(measure, 1n+limit), 1n+remaining), 1n+M.budget(limit, measure, remaining),
+    add_next(Nat.mul(measure, 1n+limit), remaining)) : M.Le(1n+M.budget(limit, measure, remaining), _)
+  refl(1n+M.budget(limit, measure, remaining))

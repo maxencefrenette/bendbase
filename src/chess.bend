@@ -7,6 +7,7 @@ import ./geometry.bend as Geometry
 import ./pawnless_index.bend as Index
 import ./finite_table.bend as Finite
 import ./pawn_distance.bend as PawnDistance
+import ./word_parts.bend as Words
 
 # Common no-castling move rules. Promotion choice is ignored on non-promoting
 # moves; the four redundant encodings do not change the set of successors.
@@ -14,7 +15,10 @@ type Action is Data:
   Action{from: Word(6n), dest: Word(6n), promotion: Three.Material}
 
 def equal(a: Word(6n), b: Word(6n)) -> Bool:
-  Material.equal(a, b)
+  Words.equal(6n, a, b)
+
+def move_square(+at: Word(6n), from: Word(6n), +dest: Word(6n)) -> Word(6n):
+  Bool.pick(Word(6n), equal(at, from), dest, at)
 
 def bits(n: Nat, +value: U32) -> Word(n):
   match n:
@@ -130,7 +134,7 @@ def relocate(men: List<&2, P.Man>, +from: Word(6n), +dest: Word(6n)) -> List<&2,
     case Nil{}:
       Nil{}
     case P.Man{owner, kind, at} <> tail:
-      P.Man{owner, kind, Material.move_square(at, from, dest)} <> relocate(tail, from, dest)
+      P.Man{owner, kind, move_square(at, from, dest)} <> relocate(tail, from, dest)
 
 # Reconstruct the immediately preceding double push for asserted EP rights.
 # Both traversed squares were empty, the predecessor was valid, and the
@@ -203,14 +207,14 @@ def move_men(men: List<&2, P.Man>, +from: Word(6n), +dest: Word(6n), +choice: Th
       Nil{}
     case P.Man{+owner, kind, +at} <> tail:
       keep(equal(at, dest) || (ep && equal(at, victim)),
-        P.Man{owner, moved_kind(equal(at, from), owner, kind, dest, choice), Material.move_square(at, from, dest)},
+        P.Man{owner, moved_kind(equal(at, from), owner, kind, dest, choice), move_square(at, from, dest)},
         move_men(tail, from, dest, choice, ep, victim))
 
 def after(+position: P.Position, +action: Action) -> P.Position:
   match position action:
     case P.Position{+turn, wk, bk, men, ep, target} Action{+from, +dest, choice}:
       +double = double_move(position, action)
-      P.Position{Three.other(turn), Material.move_square(wk, from, dest), Material.move_square(bk, from, dest),
+      P.Position{Three.other(turn), move_square(wk, from, dest), move_square(bk, from, dest),
         move_men(men, from, dest, choice, ep_move(position, action), shift(Three.other(turn), dest)),
         double, Bool.pick(Word(6n), double, shift(turn, from), Word.zero(6n))}
 

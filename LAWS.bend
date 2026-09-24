@@ -33,10 +33,13 @@ import ./src/chess_measure.bend as Measure
 # ranks remaining to promotion for every pawn. Double pushes consume two;
 # promotion removes the pawn-distance contribution but keeps the man.
 # The move-update proof is structural over arbitrary material, including EP.
-# IMPORTANT: the reset theorem still has an explicit local pawn-progress
-# premise. Pawn geometry establishes progress for a selected pawn; deriving
-# MoveProgress for the entire list from legal + distinct source occupancy is
-# the remaining bridge. These laws do NOT yet claim N-men WDL correctness.
+# Legal selection and distinct occupancy establish the pawn-progress premise:
+# every touched man is the selected mover, with the correct owner and geometry.
+# Legal resets strictly decrease the measure; quiet moves preserve it.
+# Combining it with the remaining halfmove clock gives a natural-number bound
+# decreasing on EVERY legal continuation, including routed address/clock updates.
+# These ordering laws do NOT yet claim N-men WDL correctness: complete cache
+# coverage, component compilation, and production integration remain obligations.
 law common_pawn_geometry_decreases_distance:
   for +owner: Game.Player
   for +from: Word(6n)
@@ -56,20 +59,48 @@ law common_move_update_respects_measure:
   Measure.Bound(Measure.changes(pieces, from, dest, ep, victim),
     Measure.men(CommonChess.move_men(pieces, from, dest, choice, ep, victim)), Measure.men(pieces))
 
-law common_resets_decrease_measure_given_pawn_progress:
+law common_legal_resets_decrease_measure:
   for +board: Position.Position
   for +move: CommonChess.Action
-  for progress: Measure.MoveProgress(board, move)
+  for legal: Game.Truth(CommonChess.legal(board, move))
   for reset: Game.Truth(CommonChess.resets(board, move))
   Measure.Lt(Measure.position(CommonChess.after(board, move)), Measure.position(board))
+
+law common_legal_quiet_moves_preserve_measure:
+  for +board: Position.Position
+  for +move: CommonChess.Action
+  for legal: Game.Truth(CommonChess.legal(board, move))
+  for quiet: Game.Truth(Bool.not(CommonChess.resets(board, move)))
+  {Measure.position(CommonChess.after(board, move)) == Measure.position(board) : Nat}
+
+law common_legal_continuations_decrease_budget:
+  for +limit: Nat
+  for +remaining: Nat
+  for +board: Position.Position
+  for +move: CommonChess.Action
+  for legal: Game.Truth(CommonChess.legal(board, move))
+  Measure.Lt(Measure.budget(limit, Measure.position(CommonChess.after(board, move)),
+    Bool.pick(Nat, CommonChess.resets(board, move), limit, remaining)),
+    Measure.budget(limit, Measure.position(board), 1n+remaining))
+
+law common_routed_continuations_decrease_budget:
+  for +limit: Nat
+  for +remaining: Nat
+  for +anchor: Game.Player
+  for +board: Position.Position
+  for +move: CommonChess.Action
+  for legal: Game.Truth(CommonChess.legal(board, move))
+  Measure.Lt(Measure.budget(limit, Measure.position(PositionAddress.position(ChessGraph.address(ChessGraph.route(anchor, board, move)))),
+    ChessGraph.next_clock(limit, 1n+remaining, ChessGraph.route(anchor, board, move))),
+    Measure.budget(limit, Measure.position(board), 1n+remaining))
 
 # Component identity is (stage, material signature). The generic scheduler
 # stamps completed directories with their stage and exposes only earlier
 # stages to the next builder. KPK's actual generator uses it for pawn pushes
 # and final rank selection; no cache-list offsets encode pawn progress.
-# This is a scheduling invariant, NOT yet a proof that arbitrary N-men legal
-# reset moves satisfy the pawn-progress premise above. That bridge and migration
-# of the common graph remain separate obligations. Existing WDL laws are intact.
+# Scheduling and chess ordering are proved separately. Connecting full cache
+# coverage and compiling the common graph remain obligations. Existing WDL
+# laws are intact.
 law component_stage_matching_is_exact:
   for +left: Nat
   for +right: Nat

@@ -6,6 +6,8 @@ import ./position_address_proof.bend as AddressProof
 import ./chess.bend as Chess
 import ./chess_graph.bend as Graph
 import ./finite_table.bend as Finite
+import ./chess_measure.bend as Measure
+import ./chess_selection_proof.bend as SelectionProof
 
 def edge_address(+reset: Bool, +address: Address.Address) ->
   {Graph.address(Graph.edge(reset, address)) == address : Address.Address}:
@@ -49,6 +51,32 @@ def route_clock(+limit: Nat, +remaining: Nat, +anchor: Game.Player, +position: P
   {Graph.next_clock(limit, remaining, Graph.route(anchor, position, move)) ==
    Bool.pick(Nat, Chess.resets(position, move), limit, Nat.sub(remaining, 1n)) : Nat}:
   clock_policy(limit, remaining, Chess.resets(position, move), Address.of_position(anchor, Chess.after(position, move)))
+
+def predecessor(+n: Nat) -> {Nat.sub(1n+n, 1n) == n : Nat}:
+  match n:
+    case 0n:
+      {==}
+    case 1n+rest:
+      {==}
+
+# Full-address routing and its clock update preserve the decreasing bound.
+# This is independent of material size, pawn count, promotion, and EP state.
+def route_budget(+limit: Nat, +remaining: Nat, +anchor: Game.Player, +position: P.Position, +move: Chess.Action,
+  legal: Game.Truth(Chess.legal(position, move))) ->
+  Measure.Lt(Measure.budget(limit, Measure.position(Address.position(Graph.address(Graph.route(anchor, position, move)))),
+    Graph.next_clock(limit, 1n+remaining, Graph.route(anchor, position, move))),
+    Measure.budget(limit, Measure.position(position), 1n+remaining)):
+  %Equal.sym(P.Position, Address.position(Graph.address(Graph.route(anchor, position, move))), Chess.after(position, move),
+    route_position(anchor, position, move)) :
+    Measure.Lt(Measure.budget(limit, Measure.position(_), Graph.next_clock(limit, 1n+remaining, Graph.route(anchor, position, move))),
+      Measure.budget(limit, Measure.position(position), 1n+remaining))
+  %Equal.sym(Nat, Graph.next_clock(limit, 1n+remaining, Graph.route(anchor, position, move)),
+    Bool.pick(Nat, Chess.resets(position, move), limit, Nat.sub(1n+remaining, 1n)), route_clock(limit, 1n+remaining, anchor, position, move)) :
+    Measure.Lt(Measure.budget(limit, Measure.position(Chess.after(position, move)), _), Measure.budget(limit, Measure.position(position), 1n+remaining))
+  %Equal.sym(Nat, Nat.sub(1n+remaining, 1n), remaining, predecessor(remaining)) :
+    Measure.Lt(Measure.budget(limit, Measure.position(Chess.after(position, move)), Bool.pick(Nat, Chess.resets(position, move), limit, _)),
+      Measure.budget(limit, Measure.position(position), 1n+remaining))
+  SelectionProof.legal_budget(limit, remaining, position, move, legal)
 
 def included(+allowed: Bool, +anchor: Game.Player, +position: P.Position, +move: Chess.Action, +tail: List<&2, Graph.Edge>) ->
   {Graph.positions(Graph.include(allowed, Graph.route(anchor, position, move), tail)) ==

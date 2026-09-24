@@ -1,5 +1,16 @@
 import Base
 
+def equal(n: Nat, a: Word(n), b: Word(n)) -> Bool:
+  match n a b:
+    case 0n WNil{} WNil{}:
+      True{}
+    case 1n+rest WCon{False{}, x} WCon{False{}, y}:
+      equal(rest, x, y)
+    case 1n+rest WCon{True{}, x} WCon{True{}, y}:
+      equal(rest, x, y)
+    case 1n+rest _ _:
+      False{}
+
 def append(-m: Nat, n: Nat, word: Word(n), tail: Word(m)) -> Word(Nat.add(n, m)):
   match n word:
     case 0n WNil{}:

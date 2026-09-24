@@ -110,15 +110,18 @@ not assign WDL outcomes to missing dependencies.
 
 This consolidates clock solving and scheduling machinery, not the whole chess pipeline.
 Graph builders still own legacy move rules, indexing and chess-specific routing.
-The common scheduler executes a supplied order; it does not discover or prove
-an N-men dependency order. Stage-and-material reads are implemented and used by
+The common scheduler executes a supplied order. Stage-and-material reads are implemented and used by
 KPK. `src/chess_measure.bend` defines the common stage measure as total men
 plus the sum of pawn ranks remaining to promotion. The common pawn rules express
 forward displacement using this same coordinate. Structural proofs establish
-that pawn geometry decreases distance and that the actual list updater decreases
-the measure on resets, given forward progress for each moving pawn. Deriving
-that premise for the whole list from legal-move selection and distinct occupancy
-is still pending, as is compiling the common graph into the clock solver.
+that legal resets strictly decrease this measure and legal quiet moves preserve
+it. `src/chess_selection_proof.bend` connects move selection to the actual list
+updater, with no extra pawn-progress premise. Combining the measure and the clock
+as `(limit + 1) * measure + remaining` gives a bound decreasing on every legal
+continuation, including common graph address and clock routing. At limit 100,
+this includes capture/pawn-move clock resets, promotions, and en passant.
+Complete dependency-cache coverage, component compilation, and the global WDL
+composition are still pending.
 A material signature alone does not identify a rank-specific component; the
 common measure is not yet wired into production stage selection.
 Pawnful four-man byte lists still use the game evaluator.
