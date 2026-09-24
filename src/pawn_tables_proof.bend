@@ -1,4 +1,8 @@
 import Base
+import ./clock_solver.bend as Solver
+import ./dependency_engine_proof.bend as DependencyProof
+import ./material_catalog.bend as Catalog
+import ./dependency_engine.bend as Dependencies
 import ./game.bend as Game
 import ./pawnless_chess.bend as Chess
 import ./pawn_chess.bend as Pawn
@@ -27,7 +31,7 @@ def position_board(+advance: Nat, +position: Pawn.Position) ->
       position_square(owner, turn, wk, bk, Pawn.rank(advance, owner), file)
 
 def lookup_clock(+remaining: Nat, +advance: Nat, +position: Pawn.Position, +width: Nat, +size: {width == 20n : Nat},
-  +lower: Tables.Ranks<width>, +promotions: Tables.Promotions<width>) ->
+  +lower: List<&2, Finite.Table(width, Game.Outcome)>, +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome))) ->
   {Tables.lookup(width, advance, position, Tables.clock(remaining, advance, width, lower, promotions)) ==
    Tables.at(width, Tables.phase(remaining, advance, width, lower, promotions), position) : Game.Outcome}:
   %position_board(advance, position) :
@@ -48,8 +52,8 @@ def draws_get(depth: Nat, +key: Word(depth)) ->
     case 1n+rest WCon{True{}, tail}:
       draws_get(rest, tail)
 
-def top_history(+advance: Nat, +width: Nat, +limit: Nat, +promotions: Tables.Promotions<width>) ->
-  {Tables.top(width, Tables.history(advance, width, limit, promotions)) ==
+def top_history(+advance: Nat, +width: Nat, +limit: Nat, +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome))) ->
+  {Dependencies.get(0n, Finite.Table(width, Game.Outcome), Tables.draws(width), Tables.history(advance, width, limit, promotions)) ==
    Tables.solve(advance, limit, width, limit, promotions) : Finite.Table(width, Game.Outcome)}:
   match advance:
     case 0n:
@@ -57,29 +61,25 @@ def top_history(+advance: Nat, +width: Nat, +limit: Nat, +promotions: Tables.Pro
     case 1n+prior:
       {==}
 
-def earlier_history(+advance: Nat, +width: Nat, +limit: Nat, +promotions: Tables.Promotions<width>) ->
-  {Tables.earlier(width, Tables.history(1n+advance, width, limit, promotions)) ==
-   Tables.history(advance, width, limit, promotions) : Tables.Ranks<width>}:
+def earlier_history(+advance: Nat, +width: Nat, +limit: Nat, +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome))) ->
+  {Dependencies.tail(Finite.Table(width, Game.Outcome), Tables.history(1n+advance, width, limit, promotions)) ==
+   Tables.history(advance, width, limit, promotions) : List<&2, Finite.Table(width, Game.Outcome)>}:
   {==}
 
 def promoted_generated(+limit: Nat, +width: Nat, +material: Chess.Material) ->
-  {Tables.promoted(width, material, Tables.promotions(limit, width)) ==
+  {Finite.get(2n, Finite.Table(width, Game.Outcome), Catalog.key(material), Tables.promotions(limit, width)) ==
    Pawnless.generate(limit, width, material) : Finite.Table(width, Game.Outcome)}:
-  match material:
-    case Chess.Queen{}:
-      {==}
-    case Chess.Rook{}:
-      {==}
-    case Chess.Bishop{}:
-      {==}
-    case Chess.Knight{}:
-      {==}
+  %Catalog.roundtrip(material) :
+    {Finite.get(2n, Finite.Table(width, Game.Outcome), Catalog.key(material), Tables.promotions(limit, width)) ==
+     Pawnless.generate(limit, width, _) : Finite.Table(width, Game.Outcome)}
+  DependencyProof.family_get(~Chess.Material, ~Tables.PromotionContext, ~Solver.Table, ~Tables.promotion_entry,
+    2n, width, limit, Catalog.pieces(), Catalog.key(material))
 
 def sources(+advance: Nat, clock: Nat, +width: Nat, +limit: Nat) -> Tables.Sources<width>:
   +promotions = Tables.promotions(limit, width)
   +lower = Tables.history(advance, width, limit, promotions)
   Tables.Sources{Tables.solve(1n+advance, clock, width, limit, promotions),
-    Tables.top(width, lower), Tables.top(width, Tables.earlier(width, lower)), promotions}
+    Dependencies.get(0n, Finite.Table(width, Game.Outcome), Tables.draws(width), lower), Dependencies.get(0n, Finite.Table(width, Game.Outcome), Tables.draws(width), Dependencies.tail(Finite.Table(width, Game.Outcome), lower)), promotions}
 
 def lookup_base(+advance: Nat, +position: Pawn.Position, +width: Nat, +size: {width == 20n : Nat}, +limit: Nat) ->
   {Tables.lookup(width, 1n+advance, position, Tables.solve(1n+advance, 0n, width, limit, Tables.promotions(limit, width))) ==
@@ -178,7 +178,7 @@ def push_from_here(+advance: Nat, +clock: Nat, +position: Pawn.Position, +width:
     Tables.lookup(width, advance, position, Tables.solve(advance, limit, width, limit, Tables.promotions(limit, width))),
     Game.evaluate(Chess.only(Pawn.forest(advance, limit, 1n, Pawn.Here{position} <> Nil{}, limit))),
     Equal.cong(Finite.Table(width, Game.Outcome), Game.Outcome, table => Tables.lookup(width, advance, position, table),
-      Tables.top(width, Tables.history(advance, width, limit, Tables.promotions(limit, width))),
+      Dependencies.get(0n, Finite.Table(width, Game.Outcome), Tables.draws(width), Tables.history(advance, width, limit, Tables.promotions(limit, width))),
       Tables.solve(advance, limit, width, limit, Tables.promotions(limit, width)),
       top_history(advance, width, limit, Tables.promotions(limit, width))), correct)
 
@@ -199,7 +199,7 @@ def promotion_correct(+advance: Nat, +clock: Nat, +material: Chess.Material, +bo
     Game.evaluate(Chess.tree(limit, material, board)),
     Equal.cong(Finite.Table(width, Game.Outcome), Game.Outcome,
       table => Finite.get(width, Game.Outcome, Index.encode_at(width, board), table),
-      Tables.promoted(width, material, Tables.promotions(limit, width)), Pawnless.generate(limit, width, material),
+      Finite.get(2n, Finite.Table(width, Game.Outcome), Catalog.key(material), Tables.promotions(limit, width)), Pawnless.generate(limit, width, material),
       promoted_generated(limit, width, material)), PawnlessProof.pointwise(limit, width, size, material, board))
 
 def step_from_children(+advance: Nat, +clock: Nat, +position: Pawn.Position,
@@ -422,7 +422,7 @@ def forest_correct(+advance: Nat, +remaining: Nat, +stage: Nat, +items: List<&2,
         {==}, forest_correct(1n, 1n+clock, 0n, tail, width, size, limit))
 
 def clock_position(+advance: Nat, +remaining: Nat, +board: Chess.Board, +width: Nat, +size: {width == 20n : Nat},
-  +lower: Tables.Ranks<width>, +promotions: Tables.Promotions<width>) ->
+  +lower: List<&2, Finite.Table(width, Game.Outcome)>, +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome))) ->
   {Finite.get(width, Game.Outcome, Index.encode_at(width, board), Tables.clock(remaining, advance, width, lower, promotions)) ==
    Tables.lookup(width, advance, Pawn.position(board), Tables.clock(remaining, advance, width, lower, promotions)) : Game.Outcome}:
   +position = Pawn.position(board)
@@ -474,14 +474,14 @@ def solved_board(+limit: Nat, +width: Nat, +size: {width == 20n : Nat}, +board: 
     here_from_forest(advance, limit, position, width, limit,
       forest_correct(advance, limit, 1n, Pawn.Here{position} <> Nil{}, width, size, limit)))
 
-def finish_get(depth: Nat, +width: Nat, +ranks: Tables.Ranks<width>,
+def finish_get(depth: Nat, +width: Nat, +ranks: List<&2, Finite.Table(width, Game.Outcome)>,
   +keys: Finite.Table(depth, Word(width)), +key: Word(depth)) ->
   {Finite.get(depth, Game.Outcome, key, Tables.finish(depth, width, ranks, keys)) ==
    Tables.stored(Pawn.advance(Index.decode_at(width, Finite.get(depth, Word(width), key, keys))), width, ranks,
      Finite.get(depth, Word(width), key, keys)) : Game.Outcome}:
   EngineProof.fill_get(~Tables.RankContext, ~Tables.stored_entry, depth, width, 0n, ranks, keys, key)
 
-def finish_lookup(+width: Nat, +ranks: Tables.Ranks<width>, +key: Word(width)) ->
+def finish_lookup(+width: Nat, +ranks: List<&2, Finite.Table(width, Game.Outcome)>, +key: Word(width)) ->
   {Finite.get(width, Game.Outcome, key, Tables.finish(width, width, ranks, Finite.keys(width))) ==
    Tables.stored(Pawn.advance(Index.decode_at(width, key)), width, ranks, key) : Game.Outcome}:
   %FiniteProof.keys_get(width, key) :

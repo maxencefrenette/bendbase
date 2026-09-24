@@ -61,8 +61,17 @@ conversion; it no longer contains a separate clock iteration implementation.
 `src/table_engine_proof.bend` proves indexed filling and byte conversion once,
 by structural induction, and the adapters reuse those results in their WDL proofs.
 
-Adapters retain their move rules, indexing, and dependency scheduling. Captures
-read completed lower-material tables. KPK solves ranks nearest promotion first,
+`src/dependency_engine.bend` owns parallel dependency-family construction,
+ordered component scheduling, and completed-cache lookup. Both promotion and
+capture dependencies use ordinary indexed families: the separate four-field
+`Promotions`/`Bundle` containers and selectors have been removed. KPK now uses
+the common scheduler and list cache instead of its own rank datatype, recursive
+schedule, and cache traversal. These operations are generic over payload types,
+not limited to a fixed piece count or table width. Structural proofs establish
+family lookup, exact schedule length, and preservation of every completed stage.
+
+Adapters retain their move rules, indexing, and choice of dependency strata.
+Captures read completed lower-material tables. KPK solves ranks nearest promotion first,
 so pawn pushes and promotions read completed tables at a fresh clock, while quiet
 moves read the previous clock layer. Its final rank selection also uses the
 shared indexed fill. Structural compilation proofs connect each graph to the
@@ -71,8 +80,15 @@ solver also has a general serialized-byte/strategy theorem independent of
 material. Graphs are currently held in memory: this avoids regenerating moves
 at every clock but increases memory use; no performance claim is made.
 
-This completes consolidation of clock solving, not the whole chess pipeline.
-Graph builders still own legacy move rules, indexing and dependency scheduling.
+Cache misses are explicit `None` values. Legacy adapters supply explicit draw
+fallbacks where their existing chess proofs justify them; the general cache does
+not assign WDL outcomes to missing dependencies.
+
+This consolidates clock solving and scheduling machinery, not the whole chess pipeline.
+Graph builders still own legacy move rules, indexing and chess-specific routing.
+The common scheduler executes a supplied order; it does not discover or prove
+an N-men dependency order. Connecting general successor addresses to completed
+tables still remains.
 Pawnful four-man byte lists still use the game evaluator.
 
 ### Toward an N-men solver

@@ -30,6 +30,16 @@ import ./src/clock_solver.bend as ClockSolver
 import ./src/clock_solver_proof.bend as ClockSolverProof
 import ./src/position_address_proof.bend as PositionAddressProof
 import ./src/chess_graph_proof.bend as ChessGraphProof
+import ./src/dependency_engine_proof.bend as DependencyProof
+
+def Laws.dependency_cache_returns_completed_value(A, value, cache):
+  DependencyProof.lookup_head(A, value, cache)
+
+def Laws.dependency_cache_preserves_earlier_values(A, offset, value, cache):
+  DependencyProof.lookup_previous(A, offset, value, cache)
+
+def Laws.missing_dependency_is_explicit(A, offset):
+  DependencyProof.lookup_missing(A, offset)
 
 def Laws.successor_addresses_are_lossless(anchor, position):
   PositionAddressProof.roundtrip(anchor, position)

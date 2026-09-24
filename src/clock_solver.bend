@@ -4,6 +4,9 @@ import ./finite_table.bend as Finite
 import ./table_engine.bend as Engine
 import ./pawnless_chess.bend as Three
 
+def Table(width: Nat) -> Data:
+  Finite.Table(width, Game.Outcome)
+
 # A reversible component has one key space, of arbitrary width. Captures,
 # pawn advances and promotions leave it and consult completed dependencies.
 # There are deliberately no material-family cases in this solver.

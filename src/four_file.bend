@@ -1,4 +1,6 @@
 import Base
+import ./game.bend as Game
+import ./finite_table.bend as Finite
 import ./pawnless_chess.bend as Three
 import ./four_index.bend as Index
 import ./pawnless_generator.bend as Gen
@@ -6,7 +8,7 @@ import ./table_file.bend as FileIO
 
 # The only callers supply Gen.singles(100n, 20n, 12n), so file_with is exactly
 # the byte list certified by generated_pawnless_four_wdl_is_fully_correct.
-def write_with(+path: String, material: Index.Material, lower: Gen.Bundle<20n>) -> IO(Unit):
+def write_with(+path: String, material: Index.Material, lower: Finite.Table(2n, Finite.Table(20n, Game.Outcome))) -> IO(Unit):
   do IO<Unit>:
     IO.print("Generating " ++ path ++ " (64 MiB; 100 clock layers).")
     file : File <- IO.try(File, File.open(path, "w"))
@@ -18,7 +20,7 @@ def write_with(+path: String, material: Index.Material, lower: Gen.Bundle<20n>) 
 def write(path: String, material: Index.Material) -> IO(Unit):
   do IO<Unit>:
     IO.print("Solving generalized three-man capture dependencies.")
-    lower : Gen.Bundle<20n> = Gen.singles(100n, 20n, 12n)
+    lower : Finite.Table(2n, Finite.Table(20n, Game.Outcome)) = Gen.singles(100n, 20n, 12n)
     write_with(path, material, lower)
 
 type Spec is Data:
@@ -48,7 +50,7 @@ def specs() -> List<&2, Spec>:
    Spec{"kbkn", Index.Material{Three.Bishop{}, Three.Knight{}, True{}}},
    Spec{"knkn", Index.Material{Three.Knight{}, Three.Knight{}, True{}}}]
 
-def batch(specs: List<&2, Spec>, +directory: String, +lower: Gen.Bundle<20n>) -> IO(Unit):
+def batch(specs: List<&2, Spec>, +directory: String, +lower: Finite.Table(2n, Finite.Table(20n, Game.Outcome))) -> IO(Unit):
   match specs:
     case Nil{}:
       IO.pure(Unit, Unit{})
@@ -60,5 +62,5 @@ def batch(specs: List<&2, Spec>, +directory: String, +lower: Gen.Bundle<20n>) ->
 def all(directory: String) -> IO(Unit):
   do IO<Unit>:
     IO.print("Generating 20 pawnless four-man tables. Capture dependencies are shared.")
-    lower : Gen.Bundle<20n> = Gen.singles(100n, 20n, 12n)
+    lower : Finite.Table(2n, Finite.Table(20n, Game.Outcome)) = Gen.singles(100n, 20n, 12n)
     batch(specs(), directory, lower)

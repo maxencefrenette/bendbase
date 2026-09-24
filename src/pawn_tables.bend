@@ -7,28 +7,19 @@ import ./finite_table.bend as Finite
 import ./table_engine.bend as Engine
 import ./clock_solver.bend as Solver
 import ./pawnless_tables.bend as Pawnless
+import ./dependency_engine.bend as Dependencies
+import ./material_catalog.bend as Catalog
 
 # Every rank is solved at all clocks before the next rank starts. A pawn push
 # consults an already completed rank at clock zero (limit halfmoves left).
-type Promotions<-width: Nat> is Data:
-  Promotions{queen: Finite.Table(width, Game.Outcome), rook: Finite.Table(width, Game.Outcome),
-    bishop: Finite.Table(width, Game.Outcome), knight: Finite.Table(width, Game.Outcome)}
+def PromotionContext(width: Nat) -> Data:
+  Nat
 
-def promotions(+limit: Nat, +width: Nat) -> Promotions<width>:
-  queen rook = Pawnless.generate(limit, width, Chess.Queen{}) Pawnless.generate(limit, width, Chess.Rook{})
-  bishop knight = Pawnless.generate(limit, width, Chess.Bishop{}) Pawnless.generate(limit, width, Chess.Knight{})
-  Promotions{queen, rook, bishop, knight}
+def promotion_entry(+width: Nat, limit: Nat, kind: Chess.Material) -> Finite.Table(width, Game.Outcome):
+  Pawnless.generate(limit, width, kind)
 
-def promoted(-width: Nat, material: Chess.Material, tables: Promotions<width>) -> Finite.Table(width, Game.Outcome):
-  match material tables:
-    case Chess.Queen{} Promotions{queen, rook, bishop, knight}:
-      queen
-    case Chess.Rook{} Promotions{queen, rook, bishop, knight}:
-      rook
-    case Chess.Bishop{} Promotions{queen, rook, bishop, knight}:
-      bishop
-    case Chess.Knight{} Promotions{queen, rook, bishop, knight}:
-      knight
+def promotions(limit: Nat, +width: Nat) -> Finite.Table(2n, Finite.Table(width, Game.Outcome)):
+  Dependencies.family(~Chess.Material, ~PromotionContext, ~Solver.Table, ~promotion_entry, 2n, width, limit, Catalog.pieces())
 
 def draws(depth: Nat) -> Finite.Table(depth, Game.Outcome):
   match depth:
@@ -38,27 +29,9 @@ def draws(depth: Nat) -> Finite.Table(depth, Game.Outcome):
       +tail = draws(rest)
       Finite.Fork{tail, tail}
 
-type Ranks<-width: Nat> is Data:
-  NoRanks{}
-  Rank{table: Finite.Table(width, Game.Outcome), earlier: Ranks<width>}
-
-def top(+width: Nat, ranks: Ranks<width>) -> Finite.Table(width, Game.Outcome):
-  match ranks:
-    case NoRanks{}:
-      draws(width)
-    case Rank{table, earlier}:
-      table
-
-def earlier(-width: Nat, ranks: Ranks<width>) -> Ranks<width>:
-  match ranks:
-    case NoRanks{}:
-      NoRanks{}
-    case Rank{table, earlier}:
-      earlier
-
 type Sources<-width: Nat> is Data:
   Sources{quiet: Finite.Table(width, Game.Outcome), push: Finite.Table(width, Game.Outcome),
-    double: Finite.Table(width, Game.Outcome), promotions: Promotions<width>}
+    double: Finite.Table(width, Game.Outcome), promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome))}
 
 def lookup(+width: Nat, advance: Nat, position: Pawn.Position,
   table: Finite.Table(width, Game.Outcome)) -> Game.Outcome:
@@ -73,7 +46,7 @@ def double_value(prior: Nat, position: Pawn.Position, +width: Nat,
       lookup(width, rest, position, table)
 
 def compile_edge(advance: Nat, +width: Nat, push: Finite.Table(width, Game.Outcome),
-  double: Finite.Table(width, Game.Outcome), promotions: Promotions<width>, edge: Pawn.Edge) -> Solver.Edge<width>:
+  double: Finite.Table(width, Game.Outcome), promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome)), edge: Pawn.Edge) -> Solver.Edge<width>:
   match advance edge:
     case 1n+prior Pawn.Quiet{position}:
       Solver.Quiet{Index.encode_at(width, Pawn.board(1n+prior, position))}
@@ -82,7 +55,7 @@ def compile_edge(advance: Nat, +width: Nat, push: Finite.Table(width, Game.Outco
     case 1n+prior Pawn.DoublePush{position}:
       Solver.Reset{double_value(prior, position, width, double)}
     case 1n+prior Pawn.Promoted{material, board}:
-      Solver.Reset{Finite.get(width, Game.Outcome, Index.encode_at(width, board), promoted(width, material, promotions))}
+      Solver.Reset{Finite.get(width, Game.Outcome, Index.encode_at(width, board), Finite.get(2n, Finite.Table(width, Game.Outcome), Catalog.key(material), promotions))}
     case _ _:
       Solver.Reset{Game.Draw{}}
 
@@ -126,7 +99,7 @@ def at(+width: Nat, layer: Layer<width>, position: Pawn.Position) -> Game.Outcom
       combine(node, values(Pawn.tasks(node), 1n+prior, width, sources))
 
 def edges(items: List<&2, Pawn.Task>, +advance: Nat, +width: Nat, +push: Finite.Table(width, Game.Outcome),
-  +double: Finite.Table(width, Game.Outcome), +promotions: Promotions<width>) -> List<&2, Solver.Edge<width>>:
+  +double: Finite.Table(width, Game.Outcome), +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome))) -> List<&2, Solver.Edge<width>>:
   match items:
     case Nil{}:
       Nil{}
@@ -136,7 +109,7 @@ def edges(items: List<&2, Pawn.Task>, +advance: Nat, +width: Nat, +push: Finite.
       compile_edge(advance, width, push, double, promotions, edge) <> edges(tail, advance, width, push, double, promotions)
 
 def node(+advance: Nat, +width: Nat, push: Finite.Table(width, Game.Outcome),
-  double: Finite.Table(width, Game.Outcome), promotions: Promotions<width>, +view: Pawn.View) -> Solver.Node<width>:
+  double: Finite.Table(width, Game.Outcome), promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome)), +view: Pawn.View) -> Solver.Node<width>:
   match advance view:
     case 0n _:
       Solver.Terminal{Game.Draw{}}
@@ -146,7 +119,7 @@ def node(+advance: Nat, +width: Nat, push: Finite.Table(width, Game.Outcome),
       Solver.Choice{turn, edges(Pawn.tasks(view), advance, width, push, double, promotions)}
 
 def graph_fill(depth: Nat, +width: Nat, +advance: Nat, +push: Finite.Table(width, Game.Outcome),
-  +double: Finite.Table(width, Game.Outcome), +promotions: Promotions<width>,
+  +double: Finite.Table(width, Game.Outcome), +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome)),
   keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Solver.Node<width>):
   match depth keys:
     case 0n key:
@@ -156,73 +129,70 @@ def graph_fill(depth: Nat, +width: Nat, +advance: Nat, +push: Finite.Table(width
       Finite.Fork{a, b}
 
 def graph(+width: Nat, advance: Nat, push: Finite.Table(width, Game.Outcome),
-  double: Finite.Table(width, Game.Outcome), promotions: Promotions<width>) -> Finite.Table(width, Solver.Node<width>):
+  double: Finite.Table(width, Game.Outcome), promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome))) -> Finite.Table(width, Solver.Node<width>):
   graph_fill(width, width, advance, push, double, promotions, Finite.keys(width))
 
 def clock(remaining: Nat, advance: Nat, +width: Nat,
-  +lower: Ranks<width>, promotions: Promotions<width>) -> Finite.Table(width, Game.Outcome):
-  Solver.generate(remaining, width, graph(width, advance, top(width, lower), top(width, earlier(width, lower)), promotions))
+  +lower: List<&2, Finite.Table(width, Game.Outcome)>, promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome))) -> Finite.Table(width, Game.Outcome):
+  Solver.generate(remaining, width, graph(width, advance, Dependencies.get(0n, Finite.Table(width, Game.Outcome), draws(width), lower), Dependencies.get(0n, Finite.Table(width, Game.Outcome), draws(width), Dependencies.tail(Finite.Table(width, Game.Outcome), lower)), promotions))
 
 # A proof projection, not another clock evaluator.
 def layer_phase(+width: Nat, advance: Nat, push: Finite.Table(width, Game.Outcome),
-  double: Finite.Table(width, Game.Outcome), promotions: Promotions<width>, phase: Solver.Layer<width>) -> Layer<width>:
+  double: Finite.Table(width, Game.Outcome), promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome)), phase: Solver.Layer<width>) -> Layer<width>:
   match phase:
     case Solver.Initial{}:
       Boundary{advance}
     case Solver.Next{previous}:
       Step{advance, Sources{previous, push, double, promotions}}
 
-def phase(remaining: Nat, +advance: Nat, +width: Nat, +lower: Ranks<width>,
-  +promotions: Promotions<width>) -> Layer<width>:
+def phase(remaining: Nat, +advance: Nat, +width: Nat, +lower: List<&2, Finite.Table(width, Game.Outcome)>,
+  +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome))) -> Layer<width>:
   match remaining:
     case 0n:
       Boundary{advance}
     case 1n+rest:
       Step{advance, Sources{clock(rest, advance, width, lower, promotions),
-        top(width, lower), top(width, earlier(width, lower)), promotions}}
+        Dependencies.get(0n, Finite.Table(width, Game.Outcome), draws(width), lower), Dependencies.get(0n, Finite.Table(width, Game.Outcome), draws(width), Dependencies.tail(Finite.Table(width, Game.Outcome), lower)), promotions}}
 
-def history(advance: Nat, +width: Nat, +limit: Nat, +promotions: Promotions<width>) -> Ranks<width>:
-  match advance:
-    case 0n:
-      NoRanks{}
-    case 1n++prior:
-      +lower = history(prior, width, limit, promotions)
-      Rank{clock(limit, 1n+prior, width, lower, promotions), lower}
+type ScheduleContext<-width: Nat> is Data:
+  ScheduleContext{limit: Nat, promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome))}
+
+def Schedule(width: Nat) -> Data:
+  ScheduleContext<width>
+
+def component(+stage: Nat, +width: Nat, context: Schedule(width), lower: List<&2, Finite.Table(width, Game.Outcome)>) -> Finite.Table(width, Game.Outcome):
+  match context:
+    case ScheduleContext{limit, promotions}:
+      clock(limit, stage, width, lower, promotions)
+
+def history(advance: Nat, +width: Nat, limit: Nat, promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome))) -> List<&2, Finite.Table(width, Game.Outcome)>:
+  Dependencies.history(~Schedule, ~Solver.Table, ~component, advance, width, ScheduleContext{limit, promotions})
 
 # This projection exposes arbitrary clocks for the proof. The file generator
 # below builds history once and shares its completed tables across all slots.
 def solve(advance: Nat, remaining: Nat, +width: Nat, +limit: Nat,
-  +promotions: Promotions<width>) -> Finite.Table(width, Game.Outcome):
+  +promotions: Finite.Table(2n, Finite.Table(width, Game.Outcome))) -> Finite.Table(width, Game.Outcome):
   match advance:
     case 0n:
       draws(width)
     case 1n++prior:
       clock(remaining, 1n+prior, width, history(prior, width, limit, promotions), promotions)
 
-def select(offset: Nat, +width: Nat, ranks: Ranks<width>) -> Finite.Table(width, Game.Outcome):
-  match offset ranks:
-    case 0n ranks:
-      top(width, ranks)
-    case 1n+rest NoRanks{}:
-      draws(width)
-    case 1n+rest Rank{table, earlier}:
-      select(rest, width, earlier)
-
-def stored(advance: Nat, +width: Nat, ranks: Ranks<width>, key: Word(width)) -> Game.Outcome:
+def stored(advance: Nat, +width: Nat, ranks: List<&2, Finite.Table(width, Game.Outcome)>, key: Word(width)) -> Game.Outcome:
   match advance:
     case 0n:
       Game.Draw{}
     case 1n+prior:
-      Finite.get(width, Game.Outcome, key, select(Nat.sub(5n, prior), width, ranks))
+      Finite.get(width, Game.Outcome, key, Dependencies.get(Nat.sub(5n, prior), Finite.Table(width, Game.Outcome), draws(width), ranks))
 
 def RankContext(width: Nat, low: Nat) -> Data:
-  Ranks<width>
+  List<&2, Finite.Table(width, Game.Outcome)>
 
-def stored_entry(+width: Nat, +low: Nat, ranks: Ranks<width>, key: Word(width)) -> Game.Outcome:
+def stored_entry(+width: Nat, +low: Nat, ranks: List<&2, Finite.Table(width, Game.Outcome)>, key: Word(width)) -> Game.Outcome:
   +word = key
   stored(Pawn.advance(Index.decode_at(width, word)), width, ranks, word)
 
-def finish(depth: Nat, width: Nat, ranks: Ranks<width>,
+def finish(depth: Nat, width: Nat, ranks: List<&2, Finite.Table(width, Game.Outcome)>,
   keys: Finite.Table(depth, Word(width))) -> Finite.Table(depth, Game.Outcome):
   Engine.fill(~RankContext, ~stored_entry, depth, width, 0n, ranks, keys)
 

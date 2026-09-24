@@ -23,6 +23,30 @@ import ./src/chess.bend as CommonChess
 import ./src/clock_solver.bend as ClockSolver
 import ./src/position_address.bend as PositionAddress
 import ./src/chess_graph.bend as ChessGraph
+import ./src/dependency_engine.bend as Dependencies
+
+# Shared dependency storage is not a chess-specific bundle or rank datatype.
+# These cache laws and the generic family/history proofs cover arbitrary
+# payloads, including packed tables with different widths. Existing adapters
+# still choose their chess strata and justify their explicit draw fallbacks;
+# this does NOT yet prove a universal chess dependency order or address resolver.
+law dependency_cache_returns_completed_value:
+  for -A: Data
+  for +value: A
+  for +cache: List<&2, A>
+  {Dependencies.lookup(0n, A, value <> cache) == Some{value} : Maybe<&2, A>}
+
+law dependency_cache_preserves_earlier_values:
+  for -A: Data
+  for +offset: Nat
+  for +value: A
+  for +cache: List<&2, A>
+  {Dependencies.lookup(1n+offset, A, value <> cache) == Dependencies.lookup(offset, A, cache) : Maybe<&2, A>}
+
+law missing_dependency_is_explicit:
+  for -A: Data
+  for offset: Nat
+  {Dependencies.lookup(offset, A, Nil{}) == None{} : Maybe<&2, A>}
 
 # Uniform graph construction, before dependency resolution. Each successor
 # carries its resulting material and lossless position key, including EP.
