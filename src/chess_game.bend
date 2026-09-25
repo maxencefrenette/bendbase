@@ -51,6 +51,15 @@ def forest(fuel: Nat, items: List<&2, State>, +limit: Nat, +actions: Nat) -> Lis
 def tree(+limit: Nat, +remaining: Nat, +position: P.Position) -> Game.Tree:
   Choices.only(forest(Measure.budget(limit, Measure.position(position), remaining), [State{remaining, position}], limit, 14n))
 
+# Semantic observation used to justify sharing continuations: each child is
+# unfolded independently, with its own sufficient budget.
+def standalone(items: List<&2, State>, +limit: Nat) -> List<&2, Game.Tree>:
+  match items:
+    case Nil{}:
+      Nil{}
+    case State{remaining, position} <> tail:
+      tree(limit, remaining, position) <> standalone(tail, limit)
+
 def wdl(position: P.Position) -> Game.Outcome:
   Game.evaluate(tree(100n, 100n, position))
 

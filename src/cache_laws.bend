@@ -19,6 +19,7 @@ import ./material_directory.bend as MaterialDirectory
 import ./chess_solver.bend as ChessSolver
 import ./chess_solver_proof.bend as ChessSolverProof
 import ./chess_cache_invariant.bend as CacheInvariant
+import ./chess_game.bend as ChessGame
 
 # Supporting laws for cache/index machinery and the clock-layer alternative.
 # Exact-width reads neither pad nor truncate keys. Signatures include ordered
@@ -35,6 +36,32 @@ import ./chess_cache_invariant.bend as CacheInvariant
 # A clock component theorem certifies its supplied graph, not that graph's
 # correspondence to chess or the correctness of externally supplied resets.
 # Every law here is discharged by ../PROOF.bend.
+
+# These semantic bridges remove dependence on unfolding fuel before proving
+# cached layers equal the chess game. They do not assume cache correctness.
+law common_chess_unfolding_is_fuel_independent:
+  for +left: Nat
+  for +right: Nat
+  for +items: List<&2, ChessGame.State>
+  for +limit: Nat
+  for +actions: Nat
+  for first: ChessGame.NoCutoff(left, items, limit, actions)
+  for second: ChessGame.NoCutoff(right, items, limit, actions)
+  {ChessGame.forest(left, items, limit, actions) == ChessGame.forest(right, items, limit, actions) : List<&2, Game.Tree>}
+
+law common_chess_continuations_are_standalone_games:
+  for +limit: Nat
+  for +clock: Nat
+  for +board: Position.Position
+  {ChessGame.tree(limit, 1n+clock, board) ==
+   ChessGame.assemble(ChessGraph.node(14n, Game.White{}, board),
+     ChessGame.standalone(ChessGame.states(limit, 1n+clock,
+       ChessGame.children(ChessGraph.node(14n, Game.White{}, board))), limit)) : Game.Tree}
+
+law common_chess_zero_clock_preserves_terminal_precedence:
+  for +limit: Nat
+  for +board: Position.Position
+  {ChessGame.tree(limit, 0n, board) == Game.End{CommonChess.boundary(CommonChess.view(14n, board))} : Game.Tree}
 
 law common_correct_cache_extends:
   for ~expected: Position.Position -> Game.Outcome

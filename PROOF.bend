@@ -56,6 +56,15 @@ import ./src/chess_tables_proof.bend as CommonTablesProof
 def Laws.common_chess_game_never_truncates(limit, remaining, actions, board):
   CommonGameTotal.complete(limit, remaining, actions, board)
 
+def CacheLaws.common_chess_unfolding_is_fuel_independent(left, right, items, limit, actions, first, second):
+  CommonGameProof.fuel_independent(left, right, items, limit, actions, first, second)
+
+def CacheLaws.common_chess_continuations_are_standalone_games(limit, clock, board):
+  CommonGameProof.unfold(limit, clock, board)
+
+def CacheLaws.common_chess_zero_clock_preserves_terminal_precedence(limit, board):
+  CommonGameProof.boundary(limit, board)
+
 def Laws.common_generated_wdl_is_fully_correct(name, key):
   (CommonGameTotal.complete(100n, 100n, 14n, CommonTables.position(name, key)), CommonTablesProof.correct(name, key))
 
